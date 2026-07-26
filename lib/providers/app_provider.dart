@@ -94,6 +94,7 @@ class AppProvider extends ChangeNotifier {
   static const _subscriptionUrlKey = 'subscription_url';
   static const _nodesKey = 'subscription_nodes';
   static const _selectedNodeKey = 'selected_node_id';
+  static const _routeModeKey = 'route_mode';
 
   List<VpnNode> _nodes = [];
   String _selectedNodeId = '';
@@ -177,6 +178,11 @@ class AppProvider extends ChangeNotifier {
     var restored = false;
     try {
       final prefs = await SharedPreferences.getInstance();
+      final savedRouteMode = prefs.getString(_routeModeKey);
+      if (savedRouteMode == 'global' || savedRouteMode == 'rule') {
+        _settings = _settings.copyWith(routeMode: savedRouteMode);
+        restored = true;
+      }
       final savedUrl = prefs.getString(_subscriptionUrlKey) ?? '';
       if (savedUrl.isNotEmpty) {
         _subscriptionUrl = savedUrl;
@@ -558,9 +564,13 @@ class AppProvider extends ChangeNotifier {
   }
 
   /// Save settings.
-  void saveSettings(AppSettings newSettings) {
+  Future<void> saveSettings(AppSettings newSettings) async {
     _settings = newSettings;
     notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_routeModeKey, newSettings.routeMode);
+    } catch (_) {}
   }
 
   void log(String line) {

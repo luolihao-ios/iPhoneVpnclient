@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import '../core/log_export.dart';
 import '../providers/app_provider.dart';
 import '../widgets/responsive.dart';
 import '../services/android_vpn_service.dart';
@@ -20,8 +23,7 @@ class LogsScreen extends StatelessWidget {
 
         return Column(
           children: [
-            // Diagnostic button (iOS only)
-            _DiagnosticBar(provider: provider),
+            _ActionBar(provider: provider, logs: logs),
             // Logs
             Expanded(
               child: Container(
@@ -61,9 +63,31 @@ class LogsScreen extends StatelessWidget {
   }
 }
 
-class _DiagnosticBar extends StatelessWidget {
+class _ActionBar extends StatelessWidget {
   final AppProvider provider;
-  const _DiagnosticBar({required this.provider});
+  final List<String> logs;
+  const _ActionBar({required this.provider, required this.logs});
+
+  Future<void> _export(BuildContext context) async {
+    try {
+      final directory = await getTemporaryDirectory();
+      final file = await writeLogExport(directory: directory, logs: logs);
+      final box = context.findRenderObject() as RenderBox?;
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Forge VPN logs',
+        sharePositionOrigin: box == null
+            ? null
+            : box.localToGlobal(Offset.zero) & box.size,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('导出日志失败：$error'),
+        backgroundColor: const Color(0xFFE15D52),
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +122,17 @@ class _DiagnosticBar extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Builder(
+            builder: (buttonContext) => IconButton(
+              tooltip: '导出日志',
+              onPressed:
+                  logs.isEmpty ? null : () => _export(buttonContext),
+              icon: const Icon(Icons.ios_share_outlined),
+              color: const Color(0xFF21B892),
+              disabledColor: const Color(0xFF4D5664),
             ),
           ),
         ],
