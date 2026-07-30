@@ -1,103 +1,62 @@
-# Windows Runtime Diagnostics Design
+# Windows 运行状态与诊断设计
 
-## Goal
+## 目标
 
-Keep the existing Windows sing-box command-line integration and align it with
-the recent mobile iteration's operational feedback: trustworthy connection
-state, actionable diagnostics, and complete logs. This work does not add a
-native Windows TUN or libbox runtime.
+保留 Windows 现有的 sing-box 命令行集成方式，并对齐近期移动端迭代中的运行反馈能力：可靠的连接状态、可操作的诊断信息与完整日志。本次不引入 Windows 原生 TUN 或 libbox 运行时。
 
-## Cross-platform product parity
+## 跨平台产品一致性
 
-Windows must expose the same product content as the current Android and iOS
-iterations: the same feature entry points, user-visible data, connection and
-health states, diagnostics, and log feedback. This is content and behavioral
-parity, not a requirement to duplicate the mobile layout.
+Windows 必须具备当前 Android 与 iOS 迭代中的同等产品内容：相同的功能入口、用户可见数据、连接与健康状态、诊断和日志反馈。这里要求的是内容和行为一致，不要求复制移动端布局。
 
-The desktop build will retain Windows-appropriate presentation: persistent
-desktop navigation, denser multi-column node information, a clear always-visible
-connection action area, and mouse/keyboard-friendly controls. Shared Flutter
-features are audited against their desktop branches; a mobile-only native API is
-translated to the equivalent desktop behavior where available, or surfaced as a
-clear desktop diagnostic when it has no command-line equivalent.
+桌面版保留适合 Windows 的呈现方式：常驻桌面导航、更紧凑的多列节点信息、清晰且始终可见的连接操作区，以及适合鼠标和键盘的控件。共享 Flutter 功能需要逐项核查桌面分支；移动端专属原生 API 在桌面上有等价能力时转换为桌面行为，无命令行等价物时提供明确的桌面诊断说明。
 
-## Scope
+## 范围
 
-- Track the desktop sing-box process lifecycle in `SingBoxController`.
-- Publish a connected state only after the launched process survives startup.
-- Record the active PID, start time, configuration path, last exit code, and
-  recent core logs for diagnostics.
-- Add a Windows-specific diagnostics path to the existing Logs page.
-- Preserve the Android and iOS native VPN diagnostics paths.
-- Audit recent mobile UI and feature iterations against Windows behavior, then
-  add or adapt missing desktop entry points, content, and feedback without
-  forcing a phone-oriented layout on Windows.
-- Add focused regression tests and run Flutter formatting, tests, and analysis.
+- 在 `SingBoxController` 中跟踪桌面 sing-box 进程生命周期。
+- 仅在启动进程确认存活后发布已连接状态。
+- 为诊断记录活动 PID、启动时间、配置路径、最近退出码与核心日志。
+- 在现有日志页增加 Windows 专属诊断路径。
+- 保持 Android 与 iOS 的原生 VPN 诊断路径不变。
+- 对照近期移动端界面与功能迭代审计 Windows 行为；补齐或适配缺失的桌面入口、内容与反馈，但不强行采用手机布局。
+- 新增重点回归测试，并运行 Flutter 格式化、测试和静态分析。
 
-## Non-goals
+## 非目标
 
-- Native Windows VPN/TUN support or a libbox binding.
-- Taking over a sing-box process left over from a previous application run.
-- Changes to the user's pending Android work.
-- Reworking the existing subscription, routing, or UI layout behavior.
-- Copying mobile screen composition, Android permission flows, or iOS tunnel
-  controls into the Windows desktop UI.
+- Windows 原生 VPN/TUN 支持或 libbox 绑定。
+- 接管上一次应用运行遗留的 sing-box 进程。
+- 修改用户正在进行的 Android 改动。
+- 重构现有订阅、路由或既有界面布局。
+- 将移动端屏幕编排、Android 权限流程或 iOS 隧道控制直接搬到 Windows 桌面界面。
 
-## Runtime lifecycle
+## 运行生命周期
 
-`SingBoxController` remains the single owner of the desktop process. It will
-store metadata for the current and most recently completed run: PID, start
-time, generated config path, exit code, and a bounded log buffer.
+`SingBoxController` 仍是桌面进程的唯一所有者。它保存当前及最近一次运行的元数据：PID、启动时间、生成的配置路径、退出码与有界日志缓冲区。
 
-When connecting, the controller will write the generated config, launch
-sing-box, and verify that the process has not exited during a short startup
-window. Only then will it emit the connected state. An immediate process exit
-will emit a disconnected state with the exit code and retain the captured core
-logs, so `AppProvider` never reports a false successful connection.
+连接时，控制器生成配置并启动 sing-box，然后在短暂启动窗口内确认进程没有退出；只有确认后才发出已连接状态。若进程立即退出，则发出带退出码的断开状态并保留核心日志，避免 `AppProvider` 报告虚假的连接成功。
 
-An expected disconnect invalidates the active run before terminating the
-process. A natural exit from the active run emits a disconnected state and its
-exit code. In either case, `AppProvider` clears displayed traffic data;
-unexpected exits are written to the application log.
+主动断开会先使当前运行失效，再终止进程。活动进程自然退出时会发出断开状态和退出码。两种情况下，`AppProvider` 都会清空界面流量数据；非预期退出额外写入应用日志。
 
-On a fresh Windows app initialization, the provider restores persisted
-subscription data and route mode as today but leaves runtime state disconnected.
-It does not attach to an already-running external `sing-box.exe` process.
+Windows 应用重新打开时，仍会恢复订阅数据与路由模式，但运行状态保持断开；不会附着或接管外部已运行的 `sing-box.exe`。
 
-## Diagnostics and logs
+## 诊断与日志
 
-The Logs page dispatches diagnostics by platform. On Windows it will inspect
-the desktop controller and report:
+日志页按平台分派诊断。在 Windows 上，诊断会检查并报告：
 
-- whether the configured sing-box executable exists;
-- whether this controller has an active, live process and its PID;
-- the active configuration file path and whether it exists;
-- expected mixed/HTTP/SOCKS/API port availability;
-- the most recent process exit code and start time when available;
-- a bounded tail of captured sing-box output.
+- 配置的 sing-box 可执行文件是否存在；
+- 当前控制器是否拥有活动且存活的进程，以及其 PID；
+- 当前配置文件路径及其是否存在；
+- 预期 mixed、HTTP、SOCKS 与 API 端口的监听情况；
+- 最近退出码与启动时间（如有）；
+- 已捕获 sing-box 输出的有界尾部内容。
 
-Diagnostics are appended to the existing provider logs, so they are visible in
-the Logs page and included in the existing log export. Android and iOS keep
-their MethodChannel-backed diagnostic implementations unchanged.
+诊断结果追加到现有 Provider 日志中，因此既能在日志页查看，也会随现有日志导出功能导出。Android 与 iOS 保持各自基于 `MethodChannel` 的诊断实现。
 
-## Desktop feature audit
+## 桌面功能审计
 
-The implementation begins with a parity matrix covering recently introduced
-mobile capabilities. Each item is classified as shared Flutter behavior,
-Windows command-line behavior, or native-mobile-only behavior. Shared behavior
-must be available on Windows with desktop-appropriate layout. Command-line
-behavior is completed in the desktop controller. Native-only features keep their
-mobile implementation and gain explanatory Windows diagnostics only when an
-otherwise-visible action would be misleading.
+实现从近期移动端能力的对照矩阵开始。每项能力归类为共享 Flutter 行为、Windows 命令行行为或移动端原生专属行为。共享行为必须在 Windows 可用，并采用桌面友好布局；命令行行为在桌面控制器中补齐；原生专属能力保留移动端实现，只有在桌面存在同名但会误导用户的操作时，才提供说明性的 Windows 诊断反馈。
 
-## Testing
+## 测试
 
-Introduce test seams around process launch, file checks, and port inspection
-as needed to make the desktop controller deterministic. Regression tests cover
-successful startup, immediate exit, expected disconnect, unexpected exit, and
-Windows diagnostic dispatch from the Logs page. Existing mobile service tests
-remain unchanged.
+按需为进程启动、文件检查和端口检测加入测试替身，使桌面控制器测试可预测。回归测试覆盖成功启动、立即退出、主动断开、异常退出及日志页的 Windows 诊断分派。现有移动端服务测试保持不变。
 
-Verification consists of `dart format`, focused Flutter tests, and `flutter
-analyze`. A Windows build may be added when the local Windows toolchain is
-available, but is not required to validate the Dart behavior.
+验证包括 `dart format`、聚焦 Flutter 测试和 `flutter analyze`。若本机 Windows 工具链可用，可追加 Windows 构建；但不以它作为验证 Dart 行为的前提。
