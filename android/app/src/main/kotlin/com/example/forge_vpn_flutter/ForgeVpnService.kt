@@ -7,21 +7,17 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
-import android.os.ParcelFileDescriptor
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
-import java.io.BufferedReader
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStreamReader
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Foreground Android service that owns the libbox VPN lifecycle. */
 class ForgeVpnService : VpnService() {
 
-    private var tunFd: ParcelFileDescriptor? = null
-    private var singBoxProcess: Process? = null
     private val running = AtomicBoolean(false)
-    private var outputReader: Thread? = null
-    private var errorReader: Thread? = null
+    private var platform: LibboxPlatformInterface? = null
+    private var controller: LibboxServiceController? = null
 
     companion object {
         const val ACTION_CONNECT = "com.example.forge_vpn_flutter.CONNECT"
@@ -32,6 +28,17 @@ class ForgeVpnService : VpnService() {
 
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "forge_vpn_channel"
+
+        fun assetPathForAbi(abi: String): String? {
+            val binaryAbi = when (abi) {
+                "arm64-v8a" -> "arm64"
+                "armeabi-v7a" -> "armv7"
+                "x86_64" -> "amd64"
+                "x86" -> "386"
+                else -> return null
+            }
+            return "flutter_assets/assets/binaries/sing-box-android-$binaryAbi"
+        }
     }
 
     override fun onCreate() {
@@ -41,181 +48,110 @@ class ForgeVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_CONNECT -> {
-                val configJson = intent.getStringExtra(CONFIG_EXTRA) ?: return START_STICKY
-                connect(configJson)
-            }
+            ACTION_CONNECT -> intent.getStringExtra(CONFIG_EXTRA)?.let(::connect)
             ACTION_DISCONNECT -> disconnect()
             ACTION_RESTART -> {
-                disconnect()
-                val configJson = intent.getStringExtra(CONFIG_EXTRA) ?: return START_STICKY
-                connect(configJson)
+                disconnect(reportStatus = false)
+                intent.getStringExtra(CONFIG_EXTRA)?.let(::connect)
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    override fun onRevoke() {
+        disconnect(reportStatus = true, message = "VPN permission revoked")
+        super.onRevoke()
     }
 
     override fun onDestroy() {
-        disconnect()
+        disconnect(reportStatus = false)
         super.onDestroy()
     }
 
     private fun connect(configJson: String) {
-        if (running.get()) disconnect()
+        if (controller != null) {
+            disconnect(reportStatus = false)
+        }
 
         try {
-            // 1. Build TUN interface
-            val builder = Builder()
-            builder.setName("tun0")
-            builder.addAddress("172.16.0.1", 30)
-            builder.addRoute("0.0.0.0", 0)
-            builder.addDnsServer("8.8.8.8")
-            builder.addDnsServer("1.1.1.1")
-            builder.setMtu(1500)
-            builder.setBlocking(false)
-            builder.setSession(getString(R.string.app_name))
-
-            // Exclude the app itself from VPN routing to avoid loops
-            builder.addDisallowedApplication(packageName)
-
-            tunFd = builder.establish()
-            if (tunFd == null) {
-                sendStatus("error", "Failed to establish TUN interface")
-                return
-            }
-
-            // 2. Extract sing-box binary from assets
-            val binaryFile = extractBinary()
-            if (binaryFile == null) {
-                sendStatus("error", "sing-box binary not found in assets")
-                disconnect()
-                return
-            }
-
-            // 3. Write config file
-            val configDir = File(filesDir, "singbox")
-            if (!configDir.exists()) configDir.mkdirs()
-            val configFile = File(configDir, "config.json")
-            configFile.writeText(configJson)
-
-            // 4. Start foreground notification
             startForeground(NOTIFICATION_ID, buildNotification())
-
-            // 5. Start sing-box with TUN fd
-            val fd = tunFd!!.fd
-            val cmd = arrayOf(
-                binaryFile.absolutePath,
-                "run",
-                "-c", configFile.absolutePath,
-                "-D", configDir.absolutePath,
-                "--tun-fd", fd.toString()
-            )
-
-            // Protect file descriptors from VPN routing
-            protect(fd)
-
-            singBoxProcess = Runtime.getRuntime().exec(cmd)
-            running.set(true)
-            sendStatus("connected", "")
-
-            // 6. Read stdout/stderr in background threads
-            outputReader = Thread {
-                try {
-                    val reader = BufferedReader(InputStreamReader(singBoxProcess!!.inputStream))
-                    var line: String?
-                    while (running.get() && reader.readLine().also { line = it } != null) {
-                        if (line != null) sendLog(line!!)
-                    }
-                } catch (_: Exception) {}
-            }.apply { isDaemon = true; start() }
-
-            errorReader = Thread {
-                try {
-                    val reader = BufferedReader(InputStreamReader(singBoxProcess!!.errorStream))
-                    var line: String?
-                    while (running.get() && reader.readLine().also { line = it } != null) {
-                        if (line != null) sendLog("[err] $line")
-                    }
-                } catch (_: Exception) {}
-            }.apply { isDaemon = true; start() }
-
-            // 7. Monitor process exit
-            Thread {
-                try {
-                    val exitCode = singBoxProcess!!.waitFor()
-                    if (running.get()) {
-                        running.set(false)
-                        sendStatus("disconnected", "Exit code: $exitCode")
-                        tunFd?.close()
-                        tunFd = null
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                    }
-                } catch (_: Exception) {}
-            }.apply { isDaemon = true; start() }
-
-        } catch (e: Exception) {
-            sendStatus("error", e.message ?: "Unknown error")
-            disconnect()
-        }
-    }
-
-    private fun disconnect() {
-        running.set(false)
-        singBoxProcess?.let {
-            it.destroy()
-            it.waitFor()
-        }
-        singBoxProcess = null
-        tunFd?.close()
-        tunFd = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        sendStatus("disconnected", "User stopped")
-    }
-
-    private fun extractBinary(): File? {
-        val abi = when (Build.SUPPORTED_ABIS.firstOrNull()) {
-            "arm64-v8a" -> "arm64"
-            "armeabi-v7a" -> "armv7"
-            "x86_64" -> "amd64"
-            "x86" -> "386"
-            else -> return null
+        } catch (error: Exception) {
+            VpnBridge.reportError(error.message ?: "Unable to start foreground VPN service")
+            return
         }
 
-        val assetPath = "binaries/sing-box-android-$abi"
-        val outFile = File(filesDir, BINARY_NAME)
+        val platformAdapter = LibboxPlatformInterface(this)
+        val serviceController = LibboxServiceController(
+            platform = platformAdapter,
+            packageName = packageName,
+            onStopped = { disconnect(reportStatus = true, message = "libbox stopped") },
+        )
+        platform = platformAdapter
+        controller = serviceController
 
-        return try {
-            assets.open(assetPath).use { input ->
-                FileOutputStream(outFile).use { output ->
-                    input.copyTo(output)
-                }
+        Thread {
+            try {
+                serviceController.start(configJson)
+                running.set(true)
+                VpnBridge.reportConnected("libbox service started")
+            } catch (error: Throwable) {
+                running.set(false)
+                VpnBridge.reportError(error.message ?: "Failed to start libbox")
+                serviceController.close()
+                clearController(serviceController)
+                stopForegroundSafely()
             }
-            outFile.setExecutable(true)
-            outFile
-        } catch (e: Exception) {
-            // Binary not bundled yet — could download at runtime
-            null
+        }.apply {
+            name = "forge-libbox-start"
+            isDaemon = true
+            start()
         }
     }
 
-    private fun sendStatus(status: String, message: String) {
-        VpnBridge.sendStatus(this, status, message)
+    private fun disconnect(
+        reportStatus: Boolean = true,
+        message: String = "User stopped",
+    ) {
+        running.set(false)
+        val currentController = controller
+        controller = null
+        platform = null
+        currentController?.close()
+        stopForegroundSafely()
+        if (reportStatus) {
+            VpnBridge.reportDisconnected(message)
+        }
     }
 
-    private fun sendLog(line: String) {
-        VpnBridge.sendLog(this, line)
+    private fun clearController(expected: LibboxServiceController) {
+        Handler(Looper.getMainLooper()).post {
+            if (controller === expected) {
+                controller = null
+                platform = null
+            }
+        }
+    }
+
+    private fun stopForegroundSafely() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
     }
 
     private fun buildNotification(): Notification {
         val pendingIntent = PendingIntent.getActivity(
-            this, 0,
+            this,
+            0,
             Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Forge VPN")
-            .setContentText("Connected — securing your traffic")
+            .setContentText("Connected – securing your traffic")
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -228,13 +164,12 @@ class ForgeVpnService : VpnService() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Forge VPN Service",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = "VPN connection status"
                 setShowBadge(false)
             }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 }

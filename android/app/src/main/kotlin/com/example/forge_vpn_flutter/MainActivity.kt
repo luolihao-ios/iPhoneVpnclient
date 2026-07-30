@@ -9,7 +9,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        VpnBridge.register(flutterEngine)
+        VpnBridge.register(flutterEngine, this)
     }
 
     /** Convenience method for apps that need to check VPN permission at runtime. */
@@ -27,11 +27,11 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VPN_REQUEST_CODE) {
             val granted = resultCode == RESULT_OK
-            VpnBridge.sendStatus(this, if (granted) "permission_granted" else "permission_denied", "")
+            VpnBridge.onPermissionResult(granted)
         }
     }
 
     companion object {
-        private const val VPN_REQUEST_CODE = 9001
+        const val VPN_REQUEST_CODE = 9001
     }
 }

@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/android/app/build/
+/android/build/
 
 # Symbolication related
 app.*.symbols
@@ -51,3 +53,5 @@ ios/Runner/Singbox.xcframework/
 golib/ios/vendor/
 golib/ios/go.sum
 
+# Download archives are only used to extract the tracked runtime binaries.
+/assets/binaries/*.tar.gz
