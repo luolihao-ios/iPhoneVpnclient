@@ -7,6 +7,20 @@ the recent mobile iteration's operational feedback: trustworthy connection
 state, actionable diagnostics, and complete logs. This work does not add a
 native Windows TUN or libbox runtime.
 
+## Cross-platform product parity
+
+Windows must expose the same product content as the current Android and iOS
+iterations: the same feature entry points, user-visible data, connection and
+health states, diagnostics, and log feedback. This is content and behavioral
+parity, not a requirement to duplicate the mobile layout.
+
+The desktop build will retain Windows-appropriate presentation: persistent
+desktop navigation, denser multi-column node information, a clear always-visible
+connection action area, and mouse/keyboard-friendly controls. Shared Flutter
+features are audited against their desktop branches; a mobile-only native API is
+translated to the equivalent desktop behavior where available, or surfaced as a
+clear desktop diagnostic when it has no command-line equivalent.
+
 ## Scope
 
 - Track the desktop sing-box process lifecycle in `SingBoxController`.
@@ -15,6 +29,9 @@ native Windows TUN or libbox runtime.
   recent core logs for diagnostics.
 - Add a Windows-specific diagnostics path to the existing Logs page.
 - Preserve the Android and iOS native VPN diagnostics paths.
+- Audit recent mobile UI and feature iterations against Windows behavior, then
+  add or adapt missing desktop entry points, content, and feedback without
+  forcing a phone-oriented layout on Windows.
 - Add focused regression tests and run Flutter formatting, tests, and analysis.
 
 ## Non-goals
@@ -23,6 +40,8 @@ native Windows TUN or libbox runtime.
 - Taking over a sing-box process left over from a previous application run.
 - Changes to the user's pending Android work.
 - Reworking the existing subscription, routing, or UI layout behavior.
+- Copying mobile screen composition, Android permission flows, or iOS tunnel
+  controls into the Windows desktop UI.
 
 ## Runtime lifecycle
 
@@ -60,6 +79,16 @@ the desktop controller and report:
 Diagnostics are appended to the existing provider logs, so they are visible in
 the Logs page and included in the existing log export. Android and iOS keep
 their MethodChannel-backed diagnostic implementations unchanged.
+
+## Desktop feature audit
+
+The implementation begins with a parity matrix covering recently introduced
+mobile capabilities. Each item is classified as shared Flutter behavior,
+Windows command-line behavior, or native-mobile-only behavior. Shared behavior
+must be available on Windows with desktop-appropriate layout. Command-line
+behavior is completed in the desktop controller. Native-only features keep their
+mobile implementation and gain explanatory Windows diagnostics only when an
+otherwise-visible action would be misleading.
 
 ## Testing
 
