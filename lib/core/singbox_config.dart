@@ -5,32 +5,29 @@ const int defaultHttpPort = 2080;
 const int defaultSocksPort = 2081;
 const int defaultApiPort = 9090;
 
-const List<String> cnDirectSuffixes = [
-  'cn', '中国',
-  'baidu.com', 'bdimg.com', 'bdstatic.com',
-  'qq.com', 'tencent.com',
-  'taobao.com', 'tmall.com', 'alicdn.com', 'alipay.com', 'aliyun.com',
-  'jd.com', '360buyimg.com',
-  'bilibili.com', 'bilivideo.com',
-  'zhihu.com', 'zhimg.com',
-  'weibo.com', 'weibocdn.com',
-  '163.com', '126.com', 'netease.com',
-  'sina.com.cn', 'sinaimg.cn',
-  'sogou.com', 'sohu.com',
-  '360.cn',
-  'douyin.com', 'bytedance.com', 'toutiao.com',
-  'ixigua.com',
-  'xiaomi.com', 'huawei.com', 'mi.com',
-  'meituan.com', 'dianping.com',
-  'pinduoduo.com', 'pddpic.com',
-  'kuaishou.com', 'ksapisrv.com',
-  'amap.com', 'gaode.com', 'autonavi.com',
-  'ctrip.com', 'qunar.com',
-  'iqiyi.com', 'iqiyipic.com',
-  'youku.com', 'ykimg.com',
-  'douban.com',
-  'csdn.net', 'gitee.com',
-];
+const String _singGeositeCnUrl =
+    'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs';
+const String _singGeoipCnUrl =
+    'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs';
+
+/// Official binary sing-box rule sets keep China routing current without
+/// embedding a large, hand-maintained domain/IP list in the app package.
+List<Map<String, dynamic>> _chinaRuleSets() => [
+      {
+        'tag': 'geosite-cn',
+        'type': 'remote',
+        'format': 'binary',
+        'url': _singGeositeCnUrl,
+        'download_detour': 'proxy',
+      },
+      {
+        'tag': 'geoip-cn',
+        'type': 'remote',
+        'format': 'binary',
+        'url': _singGeoipCnUrl,
+        'download_detour': 'proxy',
+      },
+    ];
 
 bool _isIpAddress(String value) {
   if (value.isEmpty) return false;
@@ -158,7 +155,7 @@ List<Map<String, dynamic>> _dnsRulesForNode(VpnNode? node, String mode) {
   }
   if (mode == 'rule') {
     rules.add({
-      'domain_suffix': cnDirectSuffixes,
+      'rule_set': ['geosite-cn'],
       'server': 'local',
     });
   }
@@ -232,7 +229,12 @@ Map<String, dynamic> buildSingBoxConfig({
     {'ip_is_private': true, 'outbound': 'direct'},
     if (mode == 'rule')
       {
-        'domain_suffix': cnDirectSuffixes,
+        'rule_set': ['geosite-cn'],
+        'outbound': 'direct',
+      },
+    if (mode == 'rule')
+      {
+        'rule_set': ['geoip-cn'],
         'outbound': 'direct',
       },
   ];
@@ -248,7 +250,7 @@ Map<String, dynamic> buildSingBoxConfig({
         {'tag': 'remote', 'address': 'tls://1.1.1.1', 'detour': 'proxy'},
       ],
       'rules': _dnsRulesForNode(node, mode),
-      'final': 'local',
+      'final': mode == 'rule' ? 'remote' : 'local',
       'strategy': 'prefer_ipv4',
     },
     'inbounds': inbounds,
@@ -257,6 +259,7 @@ Map<String, dynamic> buildSingBoxConfig({
       'auto_detect_interface': true,
       'final': mode == 'direct' ? 'direct' : 'proxy',
       'rules': routeRules,
+      if (mode == 'rule') 'rule_set': _chinaRuleSets(),
     },
   };
 

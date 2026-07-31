@@ -180,4 +180,64 @@ proxies:
     );
     expect((config['dns'] as Map)['final'], 'local');
   });
+
+  test('uses cached China domain and IP rule sets for smart routing', () {
+    final config = buildSingBoxConfig(
+      node: const VpnNode(
+        id: 'hkg-1',
+        type: NodeType.anytls,
+        name: 'Hong Kong | 01',
+        server: 'hk.example.com',
+        port: 443,
+        password: 'secret',
+      ),
+      mode: 'rule',
+      tunEnabled: true,
+      includeSocks: false,
+    );
+
+    final route = (config['route'] as Map).cast<String, dynamic>();
+    final ruleSets = (route['rule_set'] as List).cast<Map>();
+    expect(
+      ruleSets,
+      containsAll([
+        {
+          'tag': 'geosite-cn',
+          'type': 'remote',
+          'format': 'binary',
+          'url':
+              'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs',
+          'download_detour': 'proxy',
+        },
+        {
+          'tag': 'geoip-cn',
+          'type': 'remote',
+          'format': 'binary',
+          'url':
+              'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs',
+          'download_detour': 'proxy',
+        },
+      ]),
+    );
+
+    final routeRules = (route['rules'] as List).cast<Map>();
+    expect(
+      routeRules,
+      containsAll([
+        {'rule_set': ['geosite-cn'], 'outbound': 'direct'},
+        {'rule_set': ['geoip-cn'], 'outbound': 'direct'},
+      ]),
+    );
+    expect(
+      routeRules.where((rule) => rule.containsKey('domain_suffix')),
+      isEmpty,
+    );
+
+    final dns = (config['dns'] as Map).cast<String, dynamic>();
+    expect(dns['final'], 'remote');
+    expect(
+      (dns['rules'] as List).cast<Map>(),
+      contains({'rule_set': ['geosite-cn'], 'server': 'local'}),
+    );
+  });
 }

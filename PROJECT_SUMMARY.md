@@ -483,7 +483,7 @@ VPN Error: permission denied
 ### 遗留问题
 
 1. **iOS 真 VPN 签名：** 免费 Apple ID 已验证无法启动 Packet Tunnel；需要付费 Apple Developer + 匹配 profiles
-2. **智能分流规则：** 中文站域名列表（`cnDirectSuffixes`）仍比较粗糙，缺少更新维护
+2. **智能分流规则：** 已移除 `.cn` 与手工域名白名单，改用 SagerNet 官方 `geosite-cn`（中国域名）和 `geoip-cn`（中国 IP）远程二进制规则集；规则经代理下载并由 sing-box 缓存。仍需真机验证首次下载、缓存命中和抖音流量直连。
 3. **Android 实测：** Android VpnService 桥接就绪但尚未经过实际测试
 4. **付费签名后的扩展实测：** 需要验证 Settings > VPN 配置显示、连接状态、扩展启动日志
 5. **Singbox.framework 运行实测：** 付费签名通过后，如果 VPN 仍不通，需确认扩展运行时是否正确加载 `Singbox.xcframework`
