@@ -155,32 +155,45 @@ class _GeoProbeResult {
 }
 
 Future<_GeoProbeResult> _probeForeignExitIp(int proxyPort, int timeoutMs) async {
-  final result = await Process.run('curl.exe', [
-    '--silent',
-    '--show-error',
-    '--proxy',
-    'http://127.0.0.1:$proxyPort',
-    '--connect-timeout',
-    '5',
-    '--max-time',
-    max(5, (timeoutMs / 1000).ceil()).toString(),
+  const endpoints = [
     'https://api.ip.sb/geoip',
-  ]);
-  if (result.exitCode != 0) {
-    return _GeoProbeResult(false, error: '出口 IP 查询失败: ${result.stderr}');
-  }
-  try {
-    final body = jsonDecode(result.stdout.toString());
-    final countryCode = (body['country_code'] ?? body['countryCode'] ?? '')
-        .toString()
-        .toUpperCase();
-    if (countryCode.isEmpty) {
-      return const _GeoProbeResult(false, error: '出口 IP 查询未返回国家/地区');
+    'https://ipinfo.io/json',
+    'https://ipapi.co/json/',
+  ];
+  final errors = <String>[];
+  for (final endpoint in endpoints) {
+    final result = await Process.run('curl.exe', [
+      '--silent',
+      '--show-error',
+      '--proxy',
+      'http://127.0.0.1:$proxyPort',
+      '--connect-timeout',
+      '3',
+      '--max-time',
+      max(5, (timeoutMs / 1000).ceil()).toString(),
+      endpoint,
+    ]);
+    if (result.exitCode != 0) {
+      errors.add(result.stderr.toString().trim());
+      continue;
     }
-    return _GeoProbeResult(countryCode != 'CN');
-  } catch (_) {
-    return const _GeoProbeResult(false, error: '出口 IP 查询返回格式无效');
+    try {
+      final body = jsonDecode(result.stdout.toString());
+      final countryCode =
+          (body['country_code'] ?? body['countryCode'] ?? body['country'] ?? '')
+              .toString()
+              .toUpperCase();
+      if (countryCode.isEmpty) {
+        errors.add('$endpoint 未返回国家/地区');
+        continue;
+      }
+      return _GeoProbeResult(countryCode != 'CN');
+    } catch (_) {
+      errors.add('$endpoint 返回格式无效');
+    }
   }
+  return _GeoProbeResult(false,
+      error: errors.where((e) => e.isNotEmpty).join('; '));
 }
 
 Future<int> _freePort() async {
