@@ -246,8 +246,21 @@ Map<String, dynamic> buildSingBoxConfig({
     },
     'dns': {
       'servers': [
-        {'tag': 'local', 'address': '223.5.5.5', 'detour': 'direct'},
-        {'tag': 'remote', 'address': 'tls://1.1.1.1', 'detour': 'proxy'},
+        {
+          'type': 'udp',
+          'tag': 'local',
+          'server': '223.5.5.5',
+          'server_port': 53,
+          'detour': 'direct',
+        },
+        {
+          'type': 'tls',
+          'tag': 'remote',
+          'server': '1.1.1.1',
+          'server_port': 853,
+          'tls': {'enabled': true, 'server_name': 'cloudflare-dns.com'},
+          'detour': 'proxy',
+        },
       ],
       'rules': _dnsRulesForNode(node, mode),
       'final': mode == 'rule' ? 'remote' : 'local',

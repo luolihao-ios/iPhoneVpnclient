@@ -14,7 +14,7 @@ class SubscriptionImportCard extends StatefulWidget {
 
 class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
   final _controller = TextEditingController();
-  final _focusNode = FocusNode();
+  FocusNode _focusNode = FocusNode();
   bool _isExpanded = true;
   String _lastSubscriptionUrl = '';
 
@@ -30,6 +30,16 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
     FocusScope.of(context).unfocus();
   }
 
+  void _collapseImportCard() {
+    final oldFocusNode = _focusNode;
+    setState(() {
+      _isExpanded = false;
+      _focusNode = FocusNode();
+    });
+    oldFocusNode.unfocus(disposition: UnfocusDisposition.scope);
+    oldFocusNode.dispose();
+  }
+
   Future<void> _import(AppProvider provider, AppLocalizations l10n) async {
     _dismissKeyboard();
     final url = _controller.text.trim();
@@ -37,7 +47,7 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
     try {
       await provider.importSubscription(url);
       if (!mounted) return;
-      setState(() => _isExpanded = false);
+      _collapseImportCard();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(l10n.importedSuccessfully),
         backgroundColor: const Color(0xFF21B892),
@@ -56,14 +66,21 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
     return Consumer<AppProvider>(
       builder: (context, provider, _) {
         final l10n = AppLocalizations.of(context);
-        if (provider.subscriptionUrl.isNotEmpty &&
-            provider.subscriptionUrl != _lastSubscriptionUrl) {
-          _isExpanded = false;
-        }
-        _lastSubscriptionUrl = provider.subscriptionUrl;
-        if (_controller.text != provider.subscriptionUrl &&
-            provider.subscriptionUrl.isNotEmpty) {
-          _controller.text = provider.subscriptionUrl;
+        final providerUrl = provider.subscriptionUrl;
+        if (providerUrl != _lastSubscriptionUrl) {
+          _lastSubscriptionUrl = providerUrl;
+          if (providerUrl.isNotEmpty) {
+            if (_isExpanded) {
+              final oldFocusNode = _focusNode;
+              _isExpanded = false;
+              _focusNode = FocusNode();
+              oldFocusNode.unfocus(disposition: UnfocusDisposition.scope);
+              oldFocusNode.dispose();
+            }
+            if (!_focusNode.hasFocus && _controller.text != providerUrl) {
+              _controller.text = providerUrl;
+            }
+          }
         }
 
         return Container(

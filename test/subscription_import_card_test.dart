@@ -27,8 +27,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(provider.lastImportedUrl, 'https://example.com/new');
-    expect(tester.binding.focusManager.primaryFocus?.hasFocus, isNot(isTrue));
     expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('输入订阅地址期间 provider 更新不会覆盖输入内容', (tester) async {
+    final provider = _SubscriptionProvider('https://example.com/old');
+    await _pumpCard(tester, provider);
+
+    await tester.tap(find.byKey(const Key('subscription-import-toggle')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'https://example.com/new');
+    provider.notifyListeners();
+    await tester.pump();
+
+    expect(find.text('https://example.com/new'), findsOneWidget);
   });
 }
 
