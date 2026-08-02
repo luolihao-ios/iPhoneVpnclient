@@ -270,6 +270,10 @@ Map<String, dynamic> buildSingBoxConfig({
     'outbounds': outbounds,
     'route': {
       'auto_detect_interface': true,
+      'default_domain_resolver': {
+        'server': 'local',
+        'strategy': 'prefer_ipv4',
+      },
       'final': mode == 'direct' ? 'direct' : 'proxy',
       'rules': routeRules,
       if (mode == 'rule') 'rule_set': _chinaRuleSets(),
