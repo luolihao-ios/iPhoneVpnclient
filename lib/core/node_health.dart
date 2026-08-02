@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -115,17 +114,20 @@ Future<HealthCheckResult> checkNodeAvailability({
     child.stderr.drain();
 
     await _waitForLocalPort(httpPort, min(2500, timeoutMs));
-    final stopwatch = Stopwatch()..start();
     final geo = await _probeForeignExitIp(httpPort, timeoutMs);
-    stopwatch.stop();
 
     if (!geo.isForeign) {
       throw Exception(geo.error ?? '出口 IP 位于中国或无法确认');
     }
 
+    // Keep availability validation separate from the displayed latency. The
+    // latter should match desktop clients: a direct TCP round-trip to the
+    // node endpoint, not the much slower geo-IP HTTP request.
+    final latency = await tcpPing(node.server, node.port, timeoutMs: timeoutMs);
+
     return HealthCheckResult(
       ok: true,
-      latency: max(1, stopwatch.elapsedMilliseconds),
+      latency: latency,
       healthStatus: 'available',
       target: targetLabel,
     );
@@ -216,108 +218,4 @@ Future<void> _waitForLocalPort(int port, int timeoutMs) async {
     }
   }
   throw Exception('health proxy did not start');
-}
-
-Future<void> _requestThroughHttpProxy({
-  required int proxyPort,
-  required String targetHost,
-  required int targetPort,
-  required int timeoutMs,
-}) async {
-  final completer = Completer<void>();
-  Socket? socket;
-  StreamSubscription? socketSub;
-  SecureSocket? secureSocket;
-  bool settled = false;
-
-  void cleanup() {
-    if (settled) return;
-    settled = true;
-    socketSub?.cancel();
-    socket?.destroy();
-    secureSocket?.destroy();
-  }
-
-  final timer = Timer(Duration(milliseconds: timeoutMs), () {
-    cleanup();
-    if (!completer.isCompleted)
-      completer.completeError(Exception('health request timed out'));
-  });
-
-  try {
-    socket = await Socket.connect('127.0.0.1', proxyPort,
-        timeout: const Duration(milliseconds: 3000));
-
-    socket.write('CONNECT $targetHost:$targetPort HTTP/1.1\r\n'
-        'Host: $targetHost:$targetPort\r\n'
-        'Proxy-Connection: keep-alive\r\n\r\n');
-
-    String proxyBuffer = '';
-    socketSub = socket.listen(
-      (data) {
-        if (settled) return;
-        proxyBuffer += utf8.decode(data, allowMalformed: true);
-        if (!proxyBuffer.contains('\r\n\r\n')) return;
-
-        final statusMatch = RegExp(r'^HTTP/\d(?:\.\d)?\s+(\d{3})',
-                caseSensitive: false, multiLine: true)
-            .firstMatch(proxyBuffer);
-        final status = int.tryParse(statusMatch?.group(1) ?? '') ?? 0;
-
-        if (status != 200) {
-          cleanup();
-          if (!completer.isCompleted) {
-            completer.completeError(Exception('proxy CONNECT failed: $status'));
-          }
-          return;
-        }
-
-        socketSub?.cancel();
-        SecureSocket.secure(socket!,
-            host: targetHost, onBadCertificate: (_) => true).then((ss) {
-          secureSocket = ss;
-          secureSocket!.write('HEAD / HTTP/1.1\r\n'
-              'Host: $targetHost\r\n'
-              'User-Agent: ForgeDesktopVPN/0.1\r\n'
-              'Connection: close\r\n\r\n');
-
-          String responseBuffer = '';
-          secureSocket!.listen(
-            (respData) {
-              if (settled) return;
-              responseBuffer += utf8.decode(respData, allowMalformed: true);
-              if (RegExp(r'^HTTP/\d(?:\.\d)?\s+\d{3}',
-                      caseSensitive: false, multiLine: true)
-                  .hasMatch(responseBuffer)) {
-                cleanup();
-                timer.cancel();
-                if (!completer.isCompleted) completer.complete();
-              }
-            },
-            onError: (e) {
-              cleanup();
-              timer.cancel();
-              if (!completer.isCompleted) completer.completeError(e);
-            },
-            cancelOnError: true,
-          );
-        }).catchError((e) {
-          cleanup();
-          timer.cancel();
-          if (!completer.isCompleted) completer.completeError(e);
-        });
-      },
-      onError: (e) {
-        cleanup();
-        timer.cancel();
-        if (!completer.isCompleted) completer.completeError(e);
-      },
-    );
-  } catch (e) {
-    cleanup();
-    timer.cancel();
-    if (!completer.isCompleted) completer.completeError(e);
-  }
-
-  return completer.future;
 }
