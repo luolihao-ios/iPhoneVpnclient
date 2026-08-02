@@ -78,9 +78,9 @@ Future<HealthCheckResult> checkNodeAvailability({
   required String runtimeDir,
   required VpnNode node,
   int timeoutMs = 9000,
-  String targetHost = 'www.youtube.com',
+  String targetHost = 'www.gstatic.com',
   int targetPort = 443,
-  String targetLabel = 'YouTube',
+  String targetLabel = 'HTTPS',
 }) async {
   Process? child;
   String? configPath;
@@ -110,7 +110,7 @@ Future<HealthCheckResult> checkNodeAvailability({
     await configFile.writeAsString(singBoxConfigToJson(config));
 
     child = await Process.start(corePath, ['run', '-c', configPath],
-        mode: ProcessStartMode.detachedWithStdio);
+        mode: ProcessStartMode.normal);
     child.stdout.drain();
     child.stderr.drain();
 

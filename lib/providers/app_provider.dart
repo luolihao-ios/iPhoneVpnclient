@@ -448,7 +448,9 @@ class AppProvider extends ChangeNotifier {
           _nodes = updateNodeLatency(_nodes, node.id, result);
           _runtime = _runtime.copyWith(latency: selectedNode?.latencyMs);
           notifyListeners();
-        } catch (_) {}
+        } catch (error) {
+          log('Node health check failed for ${node.name}: $error');
+        }
       }
     });
 
