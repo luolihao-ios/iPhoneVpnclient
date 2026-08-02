@@ -439,21 +439,37 @@ class AppProvider extends ChangeNotifier {
         final node = nodes[cursor];
         cursor++;
 
+        late health.HealthCheckResult result;
         try {
-          final result = (_isAndroid || _isiOS)
-              ? await health.checkNodeTcpAvailability(node: node)
-              : await health.checkNodeAvailability(
-                  corePath: corePath,
-                  runtimeDir: healthDir,
-                  node: node,
-                );
-          if (batchId != _latencyBatchId) return;
-          _nodes = updateNodeLatency(_nodes, node.id, result);
-          _runtime = _runtime.copyWith(latency: selectedNode?.latencyMs);
-          notifyListeners();
+          result = await ((_isAndroid || _isiOS)
+                  ? health.checkNodeTcpAvailability(node: node)
+                  : health.checkNodeAvailability(
+                      corePath: corePath,
+                      runtimeDir: healthDir,
+                      node: node,
+                    ))
+              .timeout(
+                const Duration(seconds: 15),
+                onTimeout: () => const health.HealthCheckResult(
+                  ok: false,
+                  healthStatus: 'unavailable',
+                  target: 'HTTPS',
+                  error: '节点检查超时',
+                ),
+              );
         } catch (error) {
+          result = health.HealthCheckResult(
+            ok: false,
+            healthStatus: 'unavailable',
+            target: 'HTTPS',
+            error: error.toString(),
+          );
           log('Node health check failed for ${node.name}: $error');
         }
+        if (batchId != _latencyBatchId) return;
+        _nodes = updateNodeLatency(_nodes, node.id, result);
+        _runtime = _runtime.copyWith(latency: selectedNode?.latencyMs);
+        notifyListeners();
       }
     });
 
