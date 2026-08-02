@@ -123,8 +123,11 @@ class AppProvider extends ChangeNotifier {
   /// Auto-detect sing-box binary path for desktop platforms.
   static String _detectCorePath() {
     if (Platform.isWindows) {
-      // Check common locations
+      final executableDir = File(Platform.resolvedExecutable).parent.path;
       final candidates = [
+        '$executableDir/sing-box.exe',
+        '$executableDir/data/sing-box.exe',
+        '$executableDir/data/flutter_assets/assets/binaries/sing-box-windows-amd64.exe',
         '../desktop-vpn-client/resources/bin/sing-box.exe',
         './sing-box.exe',
         'C:/tools/sing-box/sing-box.exe',

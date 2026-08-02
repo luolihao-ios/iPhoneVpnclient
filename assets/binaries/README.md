@@ -1,27 +1,11 @@
-# sing-box Android Binaries
+# sing-box 核心文件
 
-Place sing-box ARM64 binary here for Android builds.
+移动端二进制按平台放在本目录。Windows 版本请从 sing-box 官方发布页获取对应的 x64 文件，并命名为：
 
-## Build Instructions
+`sing-box-windows-amd64.exe`
 
-From the sing-box project root:
+开发运行时可将它放在 Flutter 可执行文件旁边：
 
-```bash
-# ARM64 (most modern phones)
-GOOS=linux GOARCH=arm64 go build -o sing-box-android-arm64 -trimpath -ldflags "-s -w" ./cmd/sing-box
+`build/windows/x64/runner/Release/sing-box.exe`
 
-# ARMv7 (older phones)
-GOOS=linux GOARCH=arm GOARM=7 go build -o sing-box-android-armv7 -trimpath -ldflags "-s -w" ./cmd/sing-box
-
-# x86_64 (emulators)
-GOOS=linux GOARCH=amd64 go build -o sing-box-android-amd64 -trimpath -ldflags "-s -w" ./cmd/sing-box
-```
-
-## Download Prebuilt
-
-Or download from the [sing-box releases page](https://github.com/SagerNet/sing-box/releases):
-
-- `sing-box-<version>-linux-arm64.tar.gz` → `sing-box-android-arm64`
-- `sing-box-<version>-linux-armv7.tar.gz` → `sing-box-android-armv7`
-
-Extract the binary and rename accordingly.
+打包发布时也可以放在安装目录的 `data/flutter_assets/assets/binaries/` 下。应用会自动搜索这两个位置。
