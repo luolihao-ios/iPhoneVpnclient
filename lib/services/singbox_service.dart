@@ -8,15 +8,58 @@ import '../core/singbox_config.dart';
 typedef OnSingBoxState = void Function({bool connected, int? pid, int? code});
 typedef OnSingBoxLog = void Function(String line);
 
+/// A bounded snapshot of the desktop sing-box process for UI and diagnostics.
+class SingBoxRuntimeSnapshot {
+  SingBoxRuntimeSnapshot({
+    required this.running,
+    this.pid,
+    this.startedAt,
+    this.configPath,
+    this.exitCode,
+    List<String> recentLogs = const [],
+  }) : recentLogs = recentLogs.length <= 120
+            ? recentLogs
+            : List<String>.unmodifiable(
+                recentLogs.sublist(recentLogs.length - 120),
+              );
+
+  final bool running;
+  final int? pid;
+  final DateTime? startedAt;
+  final String? configPath;
+  final int? exitCode;
+  final List<String> recentLogs;
+
+  SingBoxRuntimeSnapshot copyWith({
+    bool? running,
+    int? pid,
+    DateTime? startedAt,
+    String? configPath,
+    int? exitCode,
+    List<String>? recentLogs,
+  }) {
+    return SingBoxRuntimeSnapshot(
+      running: running ?? this.running,
+      pid: pid ?? this.pid,
+      startedAt: startedAt ?? this.startedAt,
+      configPath: configPath ?? this.configPath,
+      exitCode: exitCode ?? this.exitCode,
+      recentLogs: recentLogs ?? this.recentLogs,
+    );
+  }
+}
+
 /// Manages the sing-box core process.
 class SingBoxController {
   final String corePath;
   final String runtimeDir;
   final OnSingBoxState? onState;
   final OnSingBoxLog? onLog;
+  final Duration startupGracePeriod;
 
   Process? _process;
   int _runId = 0;
+  SingBoxRuntimeSnapshot _snapshot = SingBoxRuntimeSnapshot(running: false);
   String? get configPath => _configPath;
   String? _configPath;
 
@@ -25,9 +68,11 @@ class SingBoxController {
     required this.runtimeDir,
     this.onState,
     this.onLog,
+    this.startupGracePeriod = const Duration(milliseconds: 250),
   });
 
   bool get isRunning => _process != null && _process!.pid > 0;
+  SingBoxRuntimeSnapshot get snapshot => _snapshot;
 
   Future<void> ensureReady() async {
     if (!await File(corePath).exists()) {
@@ -69,28 +114,60 @@ class SingBoxController {
     _process = await Process.start(
       corePath,
       ['run', '-c', _configPath!],
-      mode: ProcessStartMode.detachedWithStdio,
+      mode: ProcessStartMode.normal,
       runInShell: Platform.isWindows,
     );
 
     final pid = _process!.pid;
-    onState?.call(connected: true, pid: pid);
+    _snapshot = SingBoxRuntimeSnapshot(
+      running: true,
+      pid: pid,
+      startedAt: DateTime.now(),
+      configPath: _configPath,
+    );
 
-    _process!.stdout.transform(utf8.decoder).listen((line) {
+    _process!.stdout
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen((line) {
       if (_runId != currentRunId) return;
       log(line);
     });
 
-    _process!.stderr.transform(utf8.decoder).listen((line) {
+    _process!.stderr
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen((line) {
       if (_runId != currentRunId) return;
       log(line);
     });
 
-    _process!.exitCode.then((code) {
+    final exitCodeFuture = _process!.exitCode;
+    exitCodeFuture.then((code) {
       if (_runId != currentRunId) return;
+      _snapshot = _snapshot.copyWith(running: false, exitCode: code);
       onState?.call(connected: false, code: code);
       _process = null;
     });
+
+    // Windows shell-backed commands can take a short scheduling interval to
+    // deliver their exit notification. Keep a small floor so an immediately
+    // exiting core cannot be reported as connected just because the caller
+    // supplied an overly short grace period.
+    final effectiveGrace = startupGracePeriod < const Duration(milliseconds: 250)
+        ? const Duration(milliseconds: 250)
+        : startupGracePeriod;
+    final startupResult = await Future.any<dynamic>([
+      exitCodeFuture,
+      Future<void>.delayed(effectiveGrace),
+    ]);
+    if (startupResult is int) {
+      throw Exception('sing-box exited during startup (code $startupResult)');
+    }
+    if (_runId != currentRunId || _process == null || !_snapshot.running) {
+      final code = _snapshot.exitCode;
+      throw Exception(
+          'sing-box exited during startup${code == null ? '' : ' (code $code)'}');
+    }
+    onState?.call(connected: true, pid: pid);
 
     return {
       'mixedPort': defaultHttpPort,
@@ -108,12 +185,16 @@ class SingBoxController {
       _process!.kill();
       _process = null;
     }
+    _snapshot = _snapshot.copyWith(running: false);
     onState?.call(connected: false);
   }
 
   void log(String line) {
     final clean = line.trim();
     if (clean.isNotEmpty) {
+      _snapshot = _snapshot.copyWith(
+        recentLogs: [..._snapshot.recentLogs, clean],
+      );
       onLog?.call(clean);
     }
   }

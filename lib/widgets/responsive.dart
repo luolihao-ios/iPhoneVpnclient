@@ -13,8 +13,10 @@ class Responsive {
   }
 
   static bool isPhone(BuildContext context) => of(context) == ScreenType.phone;
-  static bool isTablet(BuildContext context) => of(context) == ScreenType.tablet;
-  static bool isDesktop(BuildContext context) => of(context) == ScreenType.desktop;
+  static bool isTablet(BuildContext context) =>
+      of(context) == ScreenType.tablet;
+  static bool isDesktop(BuildContext context) =>
+      of(context) == ScreenType.desktop;
 
   /// Vertical + horizontal padding for the outermost scroll content.
   static EdgeInsets screenPadding(BuildContext context) {

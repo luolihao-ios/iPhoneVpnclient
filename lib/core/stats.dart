@@ -29,8 +29,7 @@ Future<TrafficData> readTrafficOnce({int apiPort = 9090}) async {
     final socket = await Socket.connect('127.0.0.1', apiPort,
         timeout: const Duration(milliseconds: 2000));
 
-    socket.write(
-        'GET /traffic HTTP/1.1\r\n'
+    socket.write('GET /traffic HTTP/1.1\r\n'
         'Host: 127.0.0.1:$apiPort\r\n'
         'Connection: close\r\n\r\n');
 

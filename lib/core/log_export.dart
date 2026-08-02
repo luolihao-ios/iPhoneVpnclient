@@ -15,7 +15,8 @@ Future<File> writeLogExport({
       '${timestamp.minute.toString().padLeft(2, '0')}'
       '${timestamp.second.toString().padLeft(2, '0')}';
   await directory.create(recursive: true);
-  final file = File('${directory.path}${Platform.pathSeparator}ForgeVPN-$stamp.txt');
+  final file =
+      File('${directory.path}${Platform.pathSeparator}ForgeVPN-$stamp.txt');
   final content = StringBuffer()
     ..writeln('Forge VPN 日志')
     ..writeln('导出时间：${timestamp.toIso8601String()}')

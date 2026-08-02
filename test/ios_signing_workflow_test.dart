@@ -8,7 +8,8 @@ void main() {
 
     expect(
       workflow,
-      contains('plutil -extract Entitlements xml1 -o "$APP_ENTITLEMENTS_PATH" -'),
+      contains(
+          'plutil -extract Entitlements xml1 -o "$APP_ENTITLEMENTS_PATH" -'),
     );
     expect(
       workflow,

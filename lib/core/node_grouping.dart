@@ -28,7 +28,8 @@ List<NodeRegionGroup> groupNodesByRegion(List<VpnNode> nodes) {
 
   return [
     for (final region in order)
-      NodeRegionGroup(regionCode: region, nodes: List.unmodifiable(grouped[region]!)),
+      NodeRegionGroup(
+          regionCode: region, nodes: List.unmodifiable(grouped[region]!)),
   ];
 }
 

@@ -11,9 +11,11 @@ import '../core/node_storage.dart';
 import '../core/subscription.dart';
 import '../core/stats.dart';
 import '../core/singbox_config.dart';
+import '../core/desktop_vpn_diagnostics.dart';
 import '../services/singbox_service.dart';
 import '../services/android_vpn_service.dart';
 import '../services/ios_vpn_service.dart';
+import '../services/windows_proxy_service.dart';
 
 /// Application settings.
 class AppSettings {
@@ -91,10 +93,13 @@ class RuntimeState {
 
 /// Main application state provider.
 class AppProvider extends ChangeNotifier {
+  AppProvider({WindowsProxyService? windowsProxy})
+      : _windowsProxy = windowsProxy ?? WindowsProxyService();
   static const _subscriptionUrlKey = 'subscription_url';
   static const _nodesKey = 'subscription_nodes';
   static const _selectedNodeKey = 'selected_node_id';
   static const _routeModeKey = 'route_mode';
+  static const _systemProxyKey = 'system_proxy';
 
   List<VpnNode> _nodes = [];
   String _selectedNodeId = '';
@@ -105,6 +110,7 @@ class AppProvider extends ChangeNotifier {
   SingBoxController? _controller;
   AndroidVpnService? _androidVpn;
   IosVpnService? _iosVpn;
+  final WindowsProxyService _windowsProxy;
   Timer? _statsTimer;
   int _latencyBatchId = 0;
   bool _isSwitching = false;
@@ -167,7 +173,7 @@ class AppProvider extends ChangeNotifier {
     } else if (_isAndroid) {
       await _initAndroid();
     } else {
-      _initDesktop(corePath);
+      await _initDesktop(corePath);
     }
 
     // Restore saved subscription URL
@@ -181,6 +187,11 @@ class AppProvider extends ChangeNotifier {
       final savedRouteMode = prefs.getString(_routeModeKey);
       if (savedRouteMode == 'global' || savedRouteMode == 'rule') {
         _settings = _settings.copyWith(routeMode: savedRouteMode);
+        restored = true;
+      }
+      if (prefs.containsKey(_systemProxyKey)) {
+        _settings = _settings.copyWith(
+            systemProxy: prefs.getBool(_systemProxyKey) ?? true);
         restored = true;
       }
       final savedUrl = prefs.getString(_subscriptionUrlKey) ?? '';
@@ -297,10 +308,16 @@ class AppProvider extends ChangeNotifier {
       corePath: corePath,
       runtimeDir: runtimeDir,
       onState: ({bool? connected, int? pid, int? code}) {
-        _runtime = _runtime.copyWith(connected: connected ?? false);
-        if (connected != true) {
+        final isConnected = connected == true;
+        _runtime = _runtime.copyWith(connected: isConnected);
+        if (isConnected) {
+          _startStats();
+        } else {
+          unawaited(_restoreWindowsProxy());
+          _statsTimer?.cancel();
           _runtime =
               _runtime.copyWith(upSpeed: 0, downSpeed: 0, proxyWarning: '');
+          if (code != null) log('sing-box exited with code $code');
         }
         notifyListeners();
       },
@@ -314,7 +331,8 @@ class AppProvider extends ChangeNotifier {
   Future<void> importSubscription(String url) async {
     final resolvedUrl = resolveSubscriptionInput(url);
     if (resolvedUrl == null) {
-      throw Exception('Unsupported subscription link. Paste an HTTPS or Stash install link.');
+      throw Exception(
+          'Unsupported subscription link. Paste an HTTPS or Stash install link.');
     }
     final fetchedNodes = await fetchSubscription(resolvedUrl);
     _latencyBatchId++;
@@ -534,15 +552,50 @@ class AppProvider extends ChangeNotifier {
 
     log('Starting sing-box: route=${settings.routeMode}, tun=${settings.tunEnabled ? "on" : "off"}');
 
-    _controller!.connect(
+    await _controller!.connect(
       node: node,
       mode: settings.routeMode,
       tunEnabled: settings.tunEnabled,
     );
+    if (settings.systemProxy) {
+      await _enableWindowsProxy();
+    } else {
+      await _restoreWindowsProxy();
+    }
+  }
 
-    _runtime = _runtime.copyWith(connected: true, proxyWarning: '');
-    _startStats();
-    notifyListeners();
+  Future<void> _enableWindowsProxy() async {
+    try {
+      await _windowsProxy.enable(proxyServer: '127.0.0.1:2080');
+      _runtime = _runtime.copyWith(proxyWarning: '');
+      notifyListeners();
+    } catch (error) {
+      log('Windows system proxy unavailable: $error');
+      _runtime = _runtime.copyWith(proxyWarning: '系统代理设置失败');
+      notifyListeners();
+    }
+  }
+
+  Future<void> _restoreWindowsProxy() async {
+    if (!_windowsProxy.ownsCurrentSettings) return;
+    try {
+      await _windowsProxy.restore();
+    } catch (error) {
+      log('Windows system proxy restore failed: $error');
+    }
+  }
+
+  /// Return VPN diagnostics for the current platform.
+  Future<Map<String, dynamic>> diagnoseVpn() async {
+    if (_isAndroid) return AndroidVpnService().diagnose();
+    if (_isiOS) return IosVpnService().diagnose();
+    if (_controller == null) {
+      return {'platform': 'windows', 'error': 'controller unavailable'};
+    }
+    return collectDesktopVpnDiagnostics(
+      corePath: _controller!.corePath,
+      snapshot: _controller!.snapshot,
+    );
   }
 
   /// Disconnect from current node.
@@ -556,6 +609,7 @@ class AppProvider extends ChangeNotifier {
     } else {
       _controller?.disconnect();
       await _stopExistingSingBoxProcesses();
+      await _restoreWindowsProxy();
     }
 
     _runtime = _runtime.copyWith(
@@ -570,6 +624,7 @@ class AppProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_routeModeKey, newSettings.routeMode);
+      await prefs.setBool(_systemProxyKey, newSettings.systemProxy);
     } catch (_) {}
   }
 
@@ -611,6 +666,7 @@ class AppProvider extends ChangeNotifier {
   void dispose() {
     _statsTimer?.cancel();
     _controller?.dispose();
+    unawaited(_restoreWindowsProxy());
     _androidVpn?.disconnect();
     _iosVpn?.disconnect();
     super.dispose();

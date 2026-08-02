@@ -55,16 +55,17 @@ class SettingsScreen extends StatelessWidget {
                 icon: Icons.settings_ethernet,
                 title: l10n.systemProxy,
                 subtitle: l10n.systemProxyManaged,
-                trailing: IgnorePointer(
-                  child: Checkbox(
-                    value: true,
-                    onChanged: null,
+                trailing: Checkbox(
+                    value: settings.systemProxy,
+                    onChanged: connected
+                        ? null
+                        : (value) => provider.saveSettings(
+                            settings.copyWith(systemProxy: value ?? false)),
                     activeColor: const Color(0xFF21B892),
                     checkColor: const Color(0xFF062019),
                     fillColor: WidgetStateProperty.all(
                         const Color(0xFF21B892).withValues(alpha: 0.3)),
                   ),
-                ),
               ),
             ),
             const SizedBox(height: 20),

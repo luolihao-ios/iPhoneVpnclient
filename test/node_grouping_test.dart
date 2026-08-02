@@ -45,7 +45,8 @@ void main() {
       node('gbr-1', '🇬🇧 Great Britain | 01'),
     ]);
 
-    expect(groups.map((group) => group.regionCode), ['HKG', 'JPN', 'KOR', 'GBR']);
+    expect(
+        groups.map((group) => group.regionCode), ['HKG', 'JPN', 'KOR', 'GBR']);
     expect(groups.first.nodes.map((item) => item.id), ['hkg-1', 'hkg-2']);
     expect(groups.last.nodes.map((item) => item.id), ['kor-1', 'kor-2']);
   });

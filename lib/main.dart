@@ -189,10 +189,6 @@ class _MainShellState extends State<MainShell> {
       labelType: NavigationRailLabelType.all,
       backgroundColor: const Color(0xFF111720),
       indicatorColor: const Color(0xFF21B892).withValues(alpha: 0.15),
-      leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: _brand(36, 14),
-      ),
       destinations: navItems
           .map((e) => NavigationRailDestination(
                 icon: Icon(e.icon),

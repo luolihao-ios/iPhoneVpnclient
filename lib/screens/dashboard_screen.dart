@@ -452,7 +452,8 @@ class _TableNodeList extends StatelessWidget {
           child: Row(
             children: [
               Text(group.regionCode.localizedRegionName(l10n),
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEEF3F8))),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Color(0xFFEEF3F8))),
               const Spacer(),
               Text(l10n.totalCount(group.nodes.length),
                   style: TextStyle(fontSize: 12, color: Colors.grey[500])),
@@ -657,10 +658,13 @@ class _PhoneNodeList extends StatelessWidget {
                   child: Row(
                     children: [
                       Text(group.regionCode.localizedRegionName(l10n),
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEEF3F8))),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFEEF3F8))),
                       const Spacer(),
                       Text(l10n.totalCount(group.nodes.length),
-                          style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[500])),
                     ],
                   ),
                 ),

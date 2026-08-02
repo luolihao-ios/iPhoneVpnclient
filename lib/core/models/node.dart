@@ -254,7 +254,10 @@ class VpnNode {
       privateKey: json['privateKey'] as String?,
       peerPublicKey: json['peerPublicKey'] as String?,
       localAddress: json['localAddress'] as String?,
-      reserved: (json['reserved'] as List?)?.whereType<num>().map((e) => e.toInt()).toList(),
+      reserved: (json['reserved'] as List?)
+          ?.whereType<num>()
+          .map((e) => e.toInt())
+          .toList(),
     );
   }
 
@@ -263,7 +266,10 @@ class VpnNode {
     if (server.isEmpty || port <= 0) return false;
     switch (type) {
       case NodeType.shadowsocks:
-        return method != null && method!.isNotEmpty && password != null && password!.isNotEmpty;
+        return method != null &&
+            method!.isNotEmpty &&
+            password != null &&
+            password!.isNotEmpty;
       case NodeType.vmess:
       case NodeType.vless:
         return uuid != null && uuid!.isNotEmpty;

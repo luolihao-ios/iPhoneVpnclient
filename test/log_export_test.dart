@@ -5,7 +5,8 @@ import 'package:forge_vpn_flutter/core/log_export.dart';
 
 void main() {
   test('日志导出写入 UTF-8 文本和 Forge VPN 标题', () async {
-    final directory = await Directory.systemTemp.createTemp('forge-vpn-log-test-');
+    final directory =
+        await Directory.systemTemp.createTemp('forge-vpn-log-test-');
     addTearDown(() => directory.delete(recursive: true));
 
     final file = await writeLogExport(

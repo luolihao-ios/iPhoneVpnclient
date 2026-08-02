@@ -92,7 +92,8 @@ Future<HealthCheckResult> checkNodeAvailability({
     // Find a free port
     final httpPort = await _freePort();
 
-    configPath = '${runtimeDir}/health-${pid}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextDouble().toStringAsFixed(10)}.json';
+    configPath =
+        '${runtimeDir}/health-${pid}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextDouble().toStringAsFixed(10)}.json';
 
     final config = buildSingBoxConfig(
       node: node,
@@ -134,7 +135,9 @@ Future<HealthCheckResult> checkNodeAvailability({
       ok: false,
       healthStatus: 'unavailable',
       target: targetLabel,
-      error: error.toString().length > 160 ? error.toString().substring(0, 160) : error.toString(),
+      error: error.toString().length > 160
+          ? error.toString().substring(0, 160)
+          : error.toString(),
     );
   } finally {
     child?.kill();
@@ -190,15 +193,15 @@ Future<void> _requestThroughHttpProxy({
 
   final timer = Timer(Duration(milliseconds: timeoutMs), () {
     cleanup();
-    if (!completer.isCompleted) completer.completeError(Exception('health request timed out'));
+    if (!completer.isCompleted)
+      completer.completeError(Exception('health request timed out'));
   });
 
   try {
     socket = await Socket.connect('127.0.0.1', proxyPort,
         timeout: const Duration(milliseconds: 3000));
 
-    socket.write(
-        'CONNECT $targetHost:$targetPort HTTP/1.1\r\n'
+    socket.write('CONNECT $targetHost:$targetPort HTTP/1.1\r\n'
         'Host: $targetHost:$targetPort\r\n'
         'Proxy-Connection: keep-alive\r\n\r\n');
 
@@ -210,7 +213,8 @@ Future<void> _requestThroughHttpProxy({
         if (!proxyBuffer.contains('\r\n\r\n')) return;
 
         final statusMatch = RegExp(r'^HTTP/\d(?:\.\d)?\s+(\d{3})',
-            caseSensitive: false, multiLine: true).firstMatch(proxyBuffer);
+                caseSensitive: false, multiLine: true)
+            .firstMatch(proxyBuffer);
         final status = int.tryParse(statusMatch?.group(1) ?? '') ?? 0;
 
         if (status != 200) {
@@ -222,11 +226,10 @@ Future<void> _requestThroughHttpProxy({
         }
 
         socketSub?.cancel();
-        SecureSocket.secure(socket!, host: targetHost,
-            onBadCertificate: (_) => true).then((ss) {
+        SecureSocket.secure(socket!,
+            host: targetHost, onBadCertificate: (_) => true).then((ss) {
           secureSocket = ss;
-          secureSocket!.write(
-              'HEAD / HTTP/1.1\r\n'
+          secureSocket!.write('HEAD / HTTP/1.1\r\n'
               'Host: $targetHost\r\n'
               'User-Agent: ForgeDesktopVPN/0.1\r\n'
               'Connection: close\r\n\r\n');
@@ -237,7 +240,8 @@ Future<void> _requestThroughHttpProxy({
               if (settled) return;
               responseBuffer += utf8.decode(respData, allowMalformed: true);
               if (RegExp(r'^HTTP/\d(?:\.\d)?\s+\d{3}',
-                  caseSensitive: false, multiLine: true).hasMatch(responseBuffer)) {
+                      caseSensitive: false, multiLine: true)
+                  .hasMatch(responseBuffer)) {
                 cleanup();
                 timer.cancel();
                 if (!completer.isCompleted) completer.complete();

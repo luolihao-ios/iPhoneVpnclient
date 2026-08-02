@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -7,8 +5,6 @@ import 'package:share_plus/share_plus.dart';
 import '../core/log_export.dart';
 import '../providers/app_provider.dart';
 import '../widgets/responsive.dart';
-import '../services/android_vpn_service.dart';
-import '../services/ios_vpn_service.dart';
 import '../l10n/app_localizations.dart';
 
 class LogsScreen extends StatelessWidget {
@@ -76,9 +72,8 @@ class _ActionBar extends StatelessWidget {
       await Share.shareXFiles(
         [XFile(file.path)],
         subject: 'Forge VPN logs',
-        sharePositionOrigin: box == null
-            ? null
-            : box.localToGlobal(Offset.zero) & box.size,
+        sharePositionOrigin:
+            box == null ? null : box.localToGlobal(Offset.zero) & box.size,
       );
     } catch (error) {
       if (!context.mounted) return;
@@ -100,9 +95,7 @@ class _ActionBar extends StatelessWidget {
               onPressed: () async {
                 provider.log('[diag] Running VPN diagnostics...');
                 try {
-                  final diag = Platform.isAndroid
-                      ? await AndroidVpnService().diagnose()
-                      : await IosVpnService().diagnose();
+                  final diag = await provider.diagnoseVpn();
                   for (final entry in diag.entries) {
                     provider.log('[diag] ${entry.key}: ${entry.value}');
                   }
@@ -128,8 +121,7 @@ class _ActionBar extends StatelessWidget {
           Builder(
             builder: (buttonContext) => IconButton(
               tooltip: '导出日志',
-              onPressed:
-                  logs.isEmpty ? null : () => _export(buttonContext),
+              onPressed: logs.isEmpty ? null : () => _export(buttonContext),
               icon: const Icon(Icons.ios_share_outlined),
               color: const Color(0xFF21B892),
               disabledColor: const Color(0xFF4D5664),
