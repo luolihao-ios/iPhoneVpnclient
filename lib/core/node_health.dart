@@ -116,13 +116,12 @@ Future<HealthCheckResult> checkNodeAvailability({
 
     await _waitForLocalPort(httpPort, min(2500, timeoutMs));
     final stopwatch = Stopwatch()..start();
-    await _requestThroughHttpProxy(
-      proxyPort: httpPort,
-      targetHost: targetHost,
-      targetPort: targetPort,
-      timeoutMs: timeoutMs,
-    );
+    final geo = await _probeForeignExitIp(httpPort, timeoutMs);
     stopwatch.stop();
+
+    if (!geo.isForeign) {
+      throw Exception(geo.error ?? '出口 IP 位于中国或无法确认');
+    }
 
     return HealthCheckResult(
       ok: true,
@@ -146,6 +145,41 @@ Future<HealthCheckResult> checkNodeAvailability({
         await File(configPath).delete();
       } catch (_) {}
     }
+  }
+}
+
+class _GeoProbeResult {
+  const _GeoProbeResult(this.isForeign, {this.error});
+  final bool isForeign;
+  final String? error;
+}
+
+Future<_GeoProbeResult> _probeForeignExitIp(int proxyPort, int timeoutMs) async {
+  final result = await Process.run('curl.exe', [
+    '--silent',
+    '--show-error',
+    '--proxy',
+    'http://127.0.0.1:$proxyPort',
+    '--connect-timeout',
+    '5',
+    '--max-time',
+    max(5, (timeoutMs / 1000).ceil()).toString(),
+    'https://api.ip.sb/geoip',
+  ]);
+  if (result.exitCode != 0) {
+    return _GeoProbeResult(false, error: '出口 IP 查询失败: ${result.stderr}');
+  }
+  try {
+    final body = jsonDecode(result.stdout.toString());
+    final countryCode = (body['country_code'] ?? body['countryCode'] ?? '')
+        .toString()
+        .toUpperCase();
+    if (countryCode.isEmpty) {
+      return const _GeoProbeResult(false, error: '出口 IP 查询未返回国家/地区');
+    }
+    return _GeoProbeResult(countryCode != 'CN');
+  } catch (_) {
+    return const _GeoProbeResult(false, error: '出口 IP 查询返回格式无效');
   }
 }
 
