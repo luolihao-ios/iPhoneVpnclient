@@ -182,7 +182,9 @@ class AppProvider extends ChangeNotifier {
     // Restore saved subscription URL
     await _restoreSubscription();
     if (_nodes.isNotEmpty) {
-      unawaited(checkAllNodes());
+      unawaited(checkAllNodes().catchError((error, stackTrace) {
+        log('Startup node health check failed: $error');
+      }));
     }
   }
 
@@ -424,6 +426,10 @@ class AppProvider extends ChangeNotifier {
 
     final batchId = ++_latencyBatchId;
     _nodes = prepareNodesForLatencyTest(_nodes);
+    // Keep a stable order for this batch. The public `nodes` getter sorts by
+    // current health/latency, so reading it by index while results arrive can
+    // reorder the list and skip nodes permanently.
+    final nodesToCheck = List<VpnNode>.from(_nodes);
     _runtime = _runtime.copyWith(
         checkingNodes: true, latency: selectedNode?.latencyMs);
     notifyListeners();
@@ -434,9 +440,10 @@ class AppProvider extends ChangeNotifier {
     final corePath = _controller?.corePath ?? '';
     final healthDir = '${_controller?.runtimeDir ?? '/'}/health';
 
-    final workers = List.generate(min(concurrency, nodes.length), (_) async {
-      while (cursor < nodes.length && batchId == _latencyBatchId) {
-        final node = nodes[cursor];
+    final workers =
+        List.generate(min(concurrency, nodesToCheck.length), (_) async {
+      while (cursor < nodesToCheck.length && batchId == _latencyBatchId) {
+        final node = nodesToCheck[cursor];
         cursor++;
 
         late health.HealthCheckResult result;
@@ -473,22 +480,31 @@ class AppProvider extends ChangeNotifier {
       }
     });
 
+    void markRemainingUnavailable(String reason) {
+      if (batchId != _latencyBatchId) return;
+      _latencyBatchId++;
+      _nodes = _nodes
+          .map((node) => node.healthStatus == HealthStatus.checking
+              ? node.copyWith(
+                  healthStatus: HealthStatus.unavailable, latencyMs: null)
+              : node)
+          .toList();
+      _runtime = _runtime.copyWith(checkingNodes: false);
+      log(reason);
+      notifyListeners();
+    }
+
     try {
       await Future.wait(workers).timeout(const Duration(seconds: 30));
     } on TimeoutException {
       if (batchId == _latencyBatchId) {
-        _latencyBatchId++;
-        _nodes = _nodes
-            .map((node) => node.healthStatus == HealthStatus.checking
-                ? node.copyWith(
-                    healthStatus: HealthStatus.unavailable, latencyMs: null)
-                : node)
-            .toList();
-        _runtime = _runtime.copyWith(checkingNodes: false);
-        log('Node health check batch timed out after 30 seconds');
-        notifyListeners();
+        markRemainingUnavailable(
+            'Node health check batch timed out after 30 seconds');
       }
       return;
+    } catch (error, stackTrace) {
+      log('Node health check batch failed: $error');
+      markRemainingUnavailable('Node health check batch stopped unexpectedly');
     }
     if (batchId == _latencyBatchId) {
       _runtime = _runtime.copyWith(checkingNodes: false);

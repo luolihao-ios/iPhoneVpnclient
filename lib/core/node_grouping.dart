@@ -35,6 +35,8 @@ List<NodeRegionGroup> groupNodesByRegion(List<VpnNode> nodes) {
 
 String extractNodeRegion(String name) {
   final normalized = name.trim();
+  final chinesePrefix = _leadingChineseRegion(normalized);
+  if (chinesePrefix != null) return chinesePrefix;
   final match = RegExp(r'^([A-Za-z][A-Za-z0-9]*)-').firstMatch(normalized);
   if (match != null) return _canonicalRegion(match.group(1)!);
 
@@ -61,6 +63,36 @@ String extractNodeRegion(String name) {
     if (lower.contains(entry.key)) return entry.value;
   }
   return 'OTHER';
+}
+
+String? _leadingChineseRegion(String name) {
+  const countryNames = <String, String>{
+    '香港': 'HKG',
+    '澳门': 'MAC',
+    '澳門': 'MAC',
+    '新加坡': 'SGP',
+    '韩国': 'KOR',
+    '韓國': 'KOR',
+    '日本': 'JPN',
+    '美国': 'USA',
+    '美國': 'USA',
+    '加拿大': 'CAN',
+    '英国': 'GBR',
+    '英國': 'GBR',
+    '德国': 'DEU',
+    '德國': 'DEU',
+    '法国': 'FRA',
+    '法國': 'FRA',
+    '台湾': 'TWN',
+    '臺灣': 'TWN',
+  };
+  for (final entry in countryNames.entries) {
+    if (!name.startsWith(entry.key)) continue;
+    if (name.length == entry.key.length) return entry.value;
+    final next = name[entry.key.length];
+    if ('-_ |｜（('.contains(next)) return entry.value;
+  }
+  return null;
 }
 
 /// Identifies provider metadata entries that look like nodes but are not

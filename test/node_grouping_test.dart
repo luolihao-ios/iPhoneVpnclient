@@ -48,6 +48,18 @@ void main() {
     expect(
         groups.map((group) => group.regionCode), ['HKG', 'JPN', 'KOR', 'GBR']);
     expect(groups.first.nodes.map((item) => item.id), ['hkg-1', 'hkg-2']);
-    expect(groups.last.nodes.map((item) => item.id), ['kor-1', 'kor-2']);
+    final korea = groups.firstWhere((group) => group.regionCode == 'KOR');
+    expect(korea.nodes.map((item) => item.id), ['kor-1', 'kor-2']);
+  });
+
+  test('groups Chinese country prefixes into their region buckets', () {
+    final groups = groupNodesByRegion([
+      node('jpn-1', '日本-jpli'),
+      node('sgp-1', '新加坡-sgli2'),
+      node('usa-1', '美国-us-vip-1'),
+      node('hkg-1', '香港-hk-vip-1'),
+    ]);
+
+    expect(groups.map((group) => group.regionCode), ['JPN', 'SGP', 'USA', 'HKG']);
   });
 }
