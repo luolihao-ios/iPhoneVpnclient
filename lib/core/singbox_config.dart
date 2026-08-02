@@ -262,7 +262,10 @@ Map<String, dynamic> buildSingBoxConfig({
         },
       ],
       'rules': _dnsRulesForNode(node, mode),
-      'final': mode == 'rule' ? 'remote' : 'local',
+      // Global mode must resolve public domains through the proxy DNS. Using
+      // the local resolver here makes YouTube and other foreign domains slow
+      // or polluted even when the node itself is healthy.
+      'final': 'remote',
       'strategy': 'prefer_ipv4',
     },
     'inbounds': inbounds,
