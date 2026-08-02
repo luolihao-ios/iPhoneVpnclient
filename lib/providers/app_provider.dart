@@ -449,7 +449,7 @@ class AppProvider extends ChangeNotifier {
                       node: node,
                     ))
               .timeout(
-                const Duration(seconds: 15),
+                const Duration(seconds: 10),
                 onTimeout: () => const health.HealthCheckResult(
                   ok: false,
                   healthStatus: 'unavailable',
@@ -473,7 +473,23 @@ class AppProvider extends ChangeNotifier {
       }
     });
 
-    await Future.wait(workers);
+    try {
+      await Future.wait(workers).timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      if (batchId == _latencyBatchId) {
+        _latencyBatchId++;
+        _nodes = _nodes
+            .map((node) => node.healthStatus == HealthStatus.checking
+                ? node.copyWith(
+                    healthStatus: HealthStatus.unavailable, latencyMs: null)
+                : node)
+            .toList();
+        _runtime = _runtime.copyWith(checkingNodes: false);
+        log('Node health check batch timed out after 30 seconds');
+        notifyListeners();
+      }
+      return;
+    }
     if (batchId == _latencyBatchId) {
       _runtime = _runtime.copyWith(checkingNodes: false);
       notifyListeners();
