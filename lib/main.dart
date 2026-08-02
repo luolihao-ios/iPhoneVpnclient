@@ -107,40 +107,6 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
-  PreferredSizeWidget _buildAppBar(
-      bool connected, ScreenType type, AppLocalizations l10n) {
-    return AppBar(
-      title: const Text('Forge VPN'),
-      centerTitle: type == ScreenType.phone,
-      actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: connected
-                ? const Color(0xFF21B892).withValues(alpha: 0.15)
-                : const Color(0xFFE15D52).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: connected
-                  ? const Color(0xFF21B892).withValues(alpha: 0.4)
-                  : const Color(0xFFE15D52).withValues(alpha: 0.35),
-            ),
-          ),
-          child: Text(
-            connected ? l10n.connected : l10n.disconnected,
-            style: TextStyle(
-              color:
-                  connected ? const Color(0xFFBDFFED) : const Color(0xFFFFBAB4),
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildBottomNav(AppLocalizations l10n) {
     final navItems = _navItems(l10n);
     return BottomNavigationBar(
@@ -176,13 +142,11 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final connected = context.watch<AppProvider>().runtime.connected;
     final type = Responsive.of(context);
     final l10n = AppLocalizations.of(context);
 
     if (type == ScreenType.phone) {
       return Scaffold(
-        appBar: _buildAppBar(connected, type, l10n),
         body: IndexedStack(index: _currentIndex, children: _pages),
         bottomNavigationBar: _buildBottomNav(l10n),
       );
@@ -190,7 +154,6 @@ class _MainShellState extends State<MainShell> {
 
     // Tablet + desktop: NavigationRail + body
     return Scaffold(
-      appBar: _buildAppBar(connected, type, l10n),
       body: Row(
         children: [
           _buildNavRail(l10n),

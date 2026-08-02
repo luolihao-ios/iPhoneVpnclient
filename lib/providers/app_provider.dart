@@ -181,6 +181,9 @@ class AppProvider extends ChangeNotifier {
 
     // Restore saved subscription URL
     await _restoreSubscription();
+    if (_nodes.isNotEmpty) {
+      unawaited(checkAllNodes());
+    }
   }
 
   Future<void> _restoreSubscription() async {
