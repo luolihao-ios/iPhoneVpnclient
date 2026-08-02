@@ -107,35 +107,10 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
-  Widget _brand(double size, double fontSize) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: const Color(0xFF21B892),
-            borderRadius: BorderRadius.circular(size * 0.25),
-          ),
-          child: Center(
-            child: Text('FV',
-                style: TextStyle(
-                    color: const Color(0xFF062019),
-                    fontWeight: FontWeight.w900,
-                    fontSize: fontSize)),
-          ),
-        ),
-        const SizedBox(width: 8),
-        const Text('Forge VPN', style: TextStyle(fontSize: 18)),
-      ],
-    );
-  }
-
   PreferredSizeWidget _buildAppBar(
       bool connected, ScreenType type, AppLocalizations l10n) {
     return AppBar(
-      title: _brand(28, 12),
+      title: const Text('Forge VPN'),
       centerTitle: type == ScreenType.phone,
       actions: [
         Container(
