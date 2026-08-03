@@ -138,9 +138,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
         throw VpnError.configError("No sing-box configuration provided")
     }
 
-    /// Normal browsing DNS must use the proxy on iOS. The Dart configuration
-    /// also serves Android, where some local/emulator setups need direct DNS.
-    /// The explicit local rule for resolving the proxy endpoint remains intact.
+    /// Preserve the shared DNS mode on iOS. Global mode uses the stable local
+    /// resolver while smart routing uses remote DNS; all external connections
+    /// still follow the proxy final route.
     private func proxyDNSConfiguration(_ configuration: String) -> String {
         guard let input = configuration.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: input),
@@ -149,11 +149,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
             return configuration
         }
 
-        dns["final"] = "remote"
+        let configuredDNSFinal = dns["final"] as? String ?? "local"
         root["dns"] = dns
 
-        // Do not force Cloudflare's resolver itself to bypass the tunnel.
-        // The remote DNS server has a `detour: proxy` in the shared config.
+        // Only remote DNS needs the Cloudflare address removed from the
+        // direct-rule list. Global mode intentionally keeps the stable local
+        // resolver; external connections still use the proxy final route.
         if var route = root["route"] as? [String: Any],
            var rules = route["rules"] as? [Any] {
             // sing-box v1.13 removed the legacy `dns` outbound. Hijacking DNS
@@ -175,7 +176,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
                       let cidrs = rule["ip_cidr"] as? [String] else {
                     continue
                 }
-                rule["ip_cidr"] = cidrs.filter { $0 != "1.1.1.1/32" }
+                if configuredDNSFinal == "remote" {
+                    rule["ip_cidr"] = cidrs.filter { $0 != "1.1.1.1/32" }
+                }
                 rules[index] = rule
             }
             route["rules"] = rules
