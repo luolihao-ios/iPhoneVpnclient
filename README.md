@@ -1,5 +1,7 @@
 # forge_vpn_flutter
 
+最近 Windows 端功能、节点检测、地区分组和安装包发布记录见：[docs/recent-iterations.md](docs/recent-iterations.md)。
+
 A new Flutter project.
 
 ## Getting Started
