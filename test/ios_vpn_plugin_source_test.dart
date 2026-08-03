@@ -101,4 +101,16 @@ void main() {
     expect(source, contains('serverName=\${node.serverName}'));
     expect(source, contains('passwordLength='));
   });
+
+  test('main shell protects mobile content from the system status area', () {
+    final source = File('lib/main.dart').readAsStringSync();
+    expect(source, contains('SafeArea'));
+  });
+
+  test('iOS diagnostics keeps the AnyTLS summary outside the rolling log', () {
+    final source =
+        File('ios/Runner/PacketTunnelProvider.swift').readAsStringSync();
+    expect(source, contains('configurationSummary'));
+    expect(source, contains('"configSummary"'));
+  });
 }

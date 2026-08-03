@@ -147,19 +147,23 @@ class _MainShellState extends State<MainShell> {
 
     if (type == ScreenType.phone) {
       return Scaffold(
-        body: IndexedStack(index: _currentIndex, children: _pages),
+        body: SafeArea(
+          child: IndexedStack(index: _currentIndex, children: _pages),
+        ),
         bottomNavigationBar: _buildBottomNav(l10n),
       );
     }
 
     // Tablet + desktop: NavigationRail + body
     return Scaffold(
-      body: Row(
-        children: [
-          _buildNavRail(l10n),
-          const VerticalDivider(width: 1, color: Color(0xFF2D3643)),
-          Expanded(child: IndexedStack(index: _currentIndex, children: _pages)),
-        ],
+      body: SafeArea(
+        child: Row(
+          children: [
+            _buildNavRail(l10n),
+            const VerticalDivider(width: 1, color: Color(0xFF2D3643)),
+            Expanded(child: IndexedStack(index: _currentIndex, children: _pages)),
+          ],
+        ),
       ),
     );
   }

@@ -19,6 +19,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
     private var commandServer: LibboxCommandServer?
     private lazy var platformInterface = LibboxPlatformInterface(provider: self)
     private var logLines = [String]()
+    private var configurationSummary = [String: Any]()
     private let logLock = NSLock()
 
     override func startTunnel(options: [String: NSObject]? = nil) async throws {
@@ -71,6 +72,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
                 "running": commandServer != nil,
                 "platform": "ios",
                 "engine": "libbox",
+                "configSummary": configurationSummary,
             ])
         case "logs":
             return response(["lines": recentLogs()])
@@ -194,11 +196,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
         guard let input = configuration.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: input),
               let root = object as? [String: Any] else {
+            configurationSummary = ["error": "config JSON could not be decoded"]
             appendLog("[diagnostic] config JSON could not be decoded")
             return
         }
 
         let outbounds = root["outbounds"] as? [[String: Any]] ?? []
+        var summary = [String: Any]()
         if let anytls = outbounds.first(where: {
             ($0["type"] as? String)?.lowercased() == "anytls"
         }) {
@@ -208,11 +212,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
             let tls = anytls["tls"] as? [String: Any] ?? [:]
             let serverName = tls["server_name"] as? String ?? "<missing>"
             let insecure = tls["insecure"] as? Bool ?? false
+            summary["anytls"] = true
+            summary["server"] = server
+            summary["port"] = port
+            summary["sni"] = serverName
+            summary["insecure"] = insecure
+            summary["passwordLength"] = password.count
             appendLog("[diagnostic] anytls server=\(server) port=\(port) "
                 + "sni=\(serverName) insecure=\(insecure) "
                 + "passwordLength=\(password.count)")
         } else {
             let types = outbounds.compactMap { $0["type"] as? String }.joined(separator: ",")
+            summary["anytls"] = false
+            summary["outbounds"] = types
             appendLog("[diagnostic] anytls outbound missing; outbounds=\(types)")
         }
 
@@ -224,11 +236,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
             let detour = server["detour"] as? String ?? "direct"
             return "\(tag):\(type):\(detour)"
         }.joined(separator: ",")
+        summary["dnsFinal"] = dnsFinal
+        summary["dnsServers"] = dnsServers
         appendLog("[diagnostic] dns final=\(dnsFinal) servers=\(dnsServers)")
 
         let route = root["route"] as? [String: Any] ?? [:]
         let routeFinal = route["final"] as? String ?? "<missing>"
         let routeRules = (route["rules"] as? [[String: Any]] ?? []).count
+        summary["routeFinal"] = routeFinal
+        summary["routeRules"] = routeRules
+        configurationSummary = summary
         appendLog("[diagnostic] route final=\(routeFinal) rules=\(routeRules)")
     }
 
