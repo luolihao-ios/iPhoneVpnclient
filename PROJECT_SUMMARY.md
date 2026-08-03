@@ -735,3 +735,133 @@ UI 保持自适应布局：手机/平板/桌面仍按屏幕尺寸切换导航和
 - 运行 `flutter analyze`，确认没有未生成的本地化 getter、未使用导入或类型错误。
 - 由开发者执行 `flutter build apk --debug`，安装后在雷电模拟器切换中文/英文系统语言并重启验证。
 - 记录实际构建和模拟器验证结果到本节，不新增设计文档。
+### 18. Android parity implementation plan (2026-08-03)
+
+> Goal: bring the user-visible Windows/iOS iteration capabilities that are safe and meaningful on Android into the existing Flutter/libbox architecture. Windows-only system proxy/tray behavior and iOS-only NetworkExtension signing details remain platform-specific.
+
+#### Files and responsibilities
+
+- `android/app/src/main/kotlin/com/example/forge_vpn_flutter/VpnStateStore.kt`: persist and expose the last Android VPN state/message so Flutter can restore a truthful state after activity recreation.
+- `android/app/src/main/kotlin/com/example/forge_vpn_flutter/VpnBridge.kt`: return a richer Android diagnostic snapshot and clear stale state on service death/disconnect.
+- `android/app/src/main/kotlin/com/example/forge_vpn_flutter/LibboxPlatformInterface.kt`: track the physical default interface, react to connectivity changes, and notify libbox when the network changes.
+- `android/app/src/main/kotlin/com/example/forge_vpn_flutter/LibboxServiceController.kt`: expose command-server/service/TUN lifecycle diagnostics and close resources deterministically.
+- `android/app/src/main/kotlin/com/example/forge_vpn_flutter/ForgeVpnService.kt`: report service start/stop/failure paths consistently.
+- `lib/services/android_vpn_service.dart`: normalize the richer native diagnostic/state response for Flutter.
+- `lib/providers/app_provider.dart`: restore Android state without stale connected UI, cancel checks on disconnect, and use an Android-safe health status policy.
+- `test/android_diagnostics_test.dart`: pure Dart regression tests for diagnostic normalization and stale-state handling.
+- `android/app/src/test/.../VpnStateStoreTest.kt`: native state/cleanup regression tests.
+
+#### Execution tasks
+
+1. Write failing tests for diagnostic normalization, persisted state reset, and network-change callback behavior.
+2. Add native Android diagnostic fields: `serviceRunning`, `tunEstablished`, `commandServerReady`, `defaultInterface`, `interfaces`, `lastError`, SDK/device ABI, and the complete state snapshot.
+3. Add a `ConnectivityManager.NetworkCallback` owned by `LibboxPlatformInterface`; publish the new physical interface to libbox on availability/loss and emit a log entry so DNS/network recovery is observable.
+4. Make service stop/error paths close the command server and TUN, update `VpnStateStore`, and emit one terminal Flutter status instead of leaving `connecting` forever.
+5. Add Dart-side normalization and state guards; disconnect cancels health workers and Android startup checks do not label a node unavailable solely because raw TCP bypassed the active proxy chain.
+6. Run focused native/Dart tests and `git diff --check`; the developer runs Flutter analyze/build/APK and emulator verification locally.
+
+#### Developer verification
+
+- `flutter test test/android_diagnostics_test.dart`
+- `flutter analyze`
+- `flutter build apk --debug`
+- `adb install -r build/app/outputs/flutter-apk/app-debug.apk`
+- Emulator: connect, rotate/reconnect network, open Logs → Check VPN, disconnect, force-stop/reopen, and confirm restored state is not falsely connected.
+- [ ] Google 账号扫码验证仍需专项域名诊断和跨设备出口一致性验证。
+### 19. 近期迭代与实机验证记录（2026-07-31 ～ 2026-08-03）
+
+#### 智能分流规则升级
+
+- 移除原先手工维护的 `.cn` 泛域名直连规则，避免误把 `google.cn` 等域名强制直连。
+- 智能分流改用 SagerNet 官方规则集：`geosite-cn`（中国域名）和 `geoip-cn`（中国 IP）。
+- 规则集使用远程二进制格式，并通过代理下载；启用 sing-box 缓存，避免每次启动重复下载。
+- DNS 与路由规则保持一致：中国域名/中国 IP 直连，其余流量走代理。
+- 已增加回归测试，确认规则集中同时包含中国域名和中国 IP，且不再生成 `.cn` 泛规则。
+- 实机日志确认：智能分流时微信相关域名（如 `mmbiz.qpic.cn`、`c2c.cdn.weixin.qq.com`）命中规则集并走直连；全局代理时微信上传会经过代理，受节点对国内 CDN 长连接或上传链路支持影响，可能失败。
+
+#### iOS 真机 VPN 与签名
+
+- 完成主应用与 Packet Tunnel 扩展的 App ID、Network Extensions、Personal VPN 能力配置。
+- 完成 Ad Hoc 主应用描述文件和 Tunnel 描述文件的重新生成、签名和 IPA 打包。
+- 修复 Libbox gomobile API 与 sing-box v1.13.x 的 Swift 接口变更，包括平台接口、命令服务、系统代理状态和通知接口。
+- 修复 Libbox.framework 浅层 Bundle 的 `Info.plist`、扩展签名和嵌入问题。
+- iPhone 真机已验证：VPN 配置可安装、隧道可启动、状态可进入 Connected，并能看到 sing-box TUN 流量日志。
+
+#### 移动端界面与状态持久化
+
+- 订阅地址卡片支持折叠；导入节点后可收起，减少首页占用空间。
+- 输入订阅地址后自动收起键盘；Android 与 iOS 共用 Flutter 行为。
+- 日志页增加导出按钮，可导出当前诊断日志供问题定位。
+- 路由模式（智能分流/全局代理）写入本地持久化，应用退出后不会自动恢复成全局代理。
+- 节点、订阅、选中节点和日志诊断状态继续使用本地缓存恢复，减少重启后状态丢失。
+
+#### Google 验证与微信上传问题定位
+
+- 实机对比确认：微信在智能分流下可正常发送文件，全局代理下可能失败；优先建议微信使用智能分流。
+- YouTube 播放流畅但 Google 扫码验证失败，说明普通代理链路可用，问题更可能与 Google 认证所需的稳定出口 IP、Cookie、设备时间、DNS/TLS 长连接或跨设备出口不一致有关。
+- 当前导出日志没有完整捕获 Google 认证域名，不能仅凭日志修改 Google 专用路由；后续诊断需记录 `accounts.google.com`、`gstatic.com`、`googleapis.com`、`googleusercontent.com` 和 YouTube 认证请求的 DNS、TCP、TLS 与最终路由。
+- 远程 DoT 曾出现 `read response: EOF` 后重试成功，已记录为节点/DNS 稳定性观察项，不直接判定为规则集错误。
+
+#### 当前实机验证结论
+
+- [x] iOS Packet Tunnel 能安装并建立连接。
+- [x] 智能分流下中国域名和中国 IP 命中官方规则集并直连。
+- [x] 智能分流下微信文件发送验证通过。
+- [ ] Google 账号扫码验证仍需专项域名诊断和跨设备出口一致性验证。
+- [ ] 全局代理下微信上传不作为目标模式，需避免将其与智能分流能力混淆。
+- [x] Android parity pass: native diagnostics now include service/TUN/command-server state, physical interface details, SDK/ABI, and the latest error message.
+- [x] Android libbox default-interface monitoring now follows connectivity availability/loss events and asks libbox to refresh DNS/interface state.
+- [x] Android terminal cleanup resets stale connected state and Flutter cancels in-flight node checks on disconnect; diagnostic responses are normalized defensively in Dart.
+- [ ] Flutter/Android build and emulator verification remain developer-run because local Gradle/Flutter processes can block in this environment.
+
+### 20. Windows 端近期迭代记录（2026-07-30 ～ 2026-08-03）
+
+#### Windows 与移动端功能同步
+
+- Windows 端保持与移动端一致的功能内容，同时采用桌面窗口、侧边导航和节点表格布局。
+- 支持全局代理和智能分流，系统代理会在连接、断开和退出时自动设置或清理。
+- 支持托盘后台运行，关闭窗口不再直接结束后台服务。
+- 启动时恢复订阅、节点和选中节点，并自动执行一次节点检查。
+- Windows 端会自动发现 Release 目录、应用目录和常用目录中的 `sing-box.exe`。
+
+#### 订阅与协议
+
+- 支持 HTTPS 订阅地址、Stash 安装链接和复制粘贴导入。
+- 修复订阅输入期间 provider 更新覆盖输入内容的问题。
+- 已导入订阅卡片默认折叠，点击标题展开；键盘完成会导入订阅、收起键盘和卡片。
+- 支持 VMess、VLESS、Trojan、Shadowsocks、Hysteria2、AnyTLS 和 WireGuard。
+- AnyTLS 保留 SNI、证书校验、会话检查间隔和最小空闲会话数等字段。
+- 订阅节点、选中节点和路由模式会持久化，重启后恢复。
+
+#### 节点健康检查与延迟
+
+- Windows 检查会启动临时 sing-box，通过代理验证境外出口 IP，确认节点具备实际代理能力。
+- 可用性验证与延迟显示分离，延迟使用节点服务器 TCP 握手时间，避免把出口 IP 查询耗时当成延迟。
+- 每批检查使用固定节点快照，避免状态更新导致排序变化后跳过节点。
+- 单节点超时 10 秒，整批超时 30 秒；超时节点会标记为不可用，不再永久停留在“检查中”。
+- 启动检查异常会记录日志并清理残留的“检查中”状态。
+- 已修复手动检查和启动检查中部分节点被漏检的问题。
+
+#### 节点地区分组
+
+- 支持地区代码前缀和英文国家名识别。
+- 新增中文国家/地区名前缀识别：`日本-jpli`、`新加坡-sgli2`、`美国-us-vip-1`、`香港-hk-vip-1` 等会归入对应国家卡片。
+- 同时支持 `韓國`、`臺灣`、`英國` 等繁体写法；无法识别的节点归入“其他”。
+
+#### Windows 图标与安装发布
+
+- Windows 图标替换为“锻造火花 + F”几何标志，避免与 FlClash 的蓝色折线图标混淆。
+- 新增 `installer/forge-vpn.iss` 和 `scripts/build_windows_installer.ps1`。
+- 安装包包含 Flutter Release 文件、`sing-box.exe` 和 `data` 目录，支持开始菜单、桌面快捷方式及卸载。
+- Release 输出目录为 `dist/`，已加入 `.gitignore`。
+- GitHub 仓库：`https://github.com/luolihao-ios/iPhoneVpnclient`。
+- Windows Release：`v0.1.0-windows`，安装包为 `ForgeVPN-Setup-0.1.0.exe`。
+
+#### 本轮验证
+
+- `flutter analyze lib/providers/app_provider.dart`：通过。
+- `flutter analyze lib/core/node_grouping.dart`：通过。
+- `flutter test test/singbox_service_test.dart`：通过。
+- `flutter test test/node_grouping_test.dart`：通过。
+- `flutter build windows --release`：通过。
+- Inno Setup 成功生成 Windows 安装包并上传 GitHub Release。
