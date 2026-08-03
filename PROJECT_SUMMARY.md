@@ -865,3 +865,11 @@ UI 保持自适应布局：手机/平板/桌面仍按屏幕尺寸切换导航和
 - `flutter test test/node_grouping_test.dart`：通过。
 - `flutter build windows --release`：通过。
 - Inno Setup 成功生成 Windows 安装包并上传 GitHub Release。
+
+### 21. AnyTLS iOS 诊断埋点与移动端布局调整（2026-08-04）
+
+- iOS Packet Tunnel 启动时记录脱敏的 AnyTLS 配置摘要：服务器、端口、SNI、证书校验开关和密码长度，不记录密码内容。
+- 同时记录 DNS 最终服务器、DNS 服务器类型/代理链、路由最终出口和规则数量，用于区分节点参数错误、配置未传入扩展，以及 DNS/出站握手超时。
+- Flutter 在 iOS 连接前记录选中 AnyTLS 节点的脱敏摘要，便于和 Packet Tunnel 日志逐项比对。
+- iOS 与 Android 共用的 Flutter 外层内容增加顶部间距，首页及设置、日志等页面整体下移一个框的高度，避免内容贴近系统顶部区域。
+- Flutter 测试与 iOS 真机构建由开发者在本机或 GitHub Actions 执行；本轮只提交源码和回归测试，不把本地超时视为通过。

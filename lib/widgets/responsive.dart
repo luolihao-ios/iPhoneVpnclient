@@ -22,11 +22,11 @@ class Responsive {
   static EdgeInsets screenPadding(BuildContext context) {
     switch (of(context)) {
       case ScreenType.phone:
-        return const EdgeInsets.all(16);
+        return const EdgeInsets.fromLTRB(16, 32, 16, 16);
       case ScreenType.tablet:
-        return const EdgeInsets.all(24);
+        return const EdgeInsets.fromLTRB(24, 40, 24, 24);
       case ScreenType.desktop:
-        return const EdgeInsets.all(32);
+        return const EdgeInsets.fromLTRB(32, 48, 32, 32);
     }
   }
 

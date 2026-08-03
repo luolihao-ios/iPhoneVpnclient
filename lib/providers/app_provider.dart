@@ -596,6 +596,11 @@ class AppProvider extends ChangeNotifier {
     log('Starting VPN (iOS TUN)...');
     log('Config: ${configJson.length} bytes');
     log('Node: ${node.name} (${node.type.label})');
+    if (node.type == NodeType.anytls) {
+      log('AnyTLS node summary: server=${node.server}, port=${node.port}, '
+          'serverName=${node.serverName}, insecure=${node.insecure}, '
+          'passwordLength=${node.password?.length ?? 0}');
+    }
 
     final ok = await _iosVpn!.connect(configJson);
     if (!ok) {

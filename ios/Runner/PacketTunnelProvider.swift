@@ -23,6 +23,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
 
     override func startTunnel(options: [String: NSObject]? = nil) async throws {
         let config = try tunnelConfiguration(options: options)
+        logConfigurationSummary(config)
         appendLog("[packet-tunnel] configuring libbox")
         appendLog("[packet-tunnel] normal DNS routes through proxy")
         appendLog("[packet-tunnel] port 53 routes to the DNS outbound")
@@ -184,6 +185,51 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
             return configuration
         }
         return rewritten
+    }
+
+    /// Emit a redacted configuration summary so an iOS device log can tell
+    /// whether the AnyTLS node and DNS chain reached the packet tunnel.
+    /// Password contents are deliberately never written to the log.
+    private func logConfigurationSummary(_ configuration: String) {
+        guard let input = configuration.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: input),
+              let root = object as? [String: Any] else {
+            appendLog("[diagnostic] config JSON could not be decoded")
+            return
+        }
+
+        let outbounds = root["outbounds"] as? [[String: Any]] ?? []
+        if let anytls = outbounds.first(where: {
+            ($0["type"] as? String)?.lowercased() == "anytls"
+        }) {
+            let server = anytls["server"] as? String ?? "<missing>"
+            let port = anytls["server_port"] as? Int ?? 0
+            let password = anytls["password"] as? String ?? ""
+            let tls = anytls["tls"] as? [String: Any] ?? [:]
+            let serverName = tls["server_name"] as? String ?? "<missing>"
+            let insecure = tls["insecure"] as? Bool ?? false
+            appendLog("[diagnostic] anytls server=\(server) port=\(port) "
+                + "sni=\(serverName) insecure=\(insecure) "
+                + "passwordLength=\(password.count)")
+        } else {
+            let types = outbounds.compactMap { $0["type"] as? String }.joined(separator: ",")
+            appendLog("[diagnostic] anytls outbound missing; outbounds=\(types)")
+        }
+
+        let dns = root["dns"] as? [String: Any] ?? [:]
+        let dnsFinal = dns["final"] as? String ?? "<missing>"
+        let dnsServers = (dns["servers"] as? [[String: Any]] ?? []).compactMap { server in
+            let tag = server["tag"] as? String ?? "?"
+            let type = server["type"] as? String ?? "?"
+            let detour = server["detour"] as? String ?? "direct"
+            return "\(tag):\(type):\(detour)"
+        }.joined(separator: ",")
+        appendLog("[diagnostic] dns final=\(dnsFinal) servers=\(dnsServers)")
+
+        let route = root["route"] as? [String: Any] ?? [:]
+        let routeFinal = route["final"] as? String ?? "<missing>"
+        let routeRules = (route["rules"] as? [[String: Any]] ?? []).count
+        appendLog("[diagnostic] route final=\(routeFinal) rules=\(routeRules)")
     }
 
     private func closeRuntime() {

@@ -4,8 +4,24 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:forge_vpn_flutter/providers/app_provider.dart';
 import 'package:forge_vpn_flutter/screens/dashboard_screen.dart';
+import 'package:forge_vpn_flutter/widgets/responsive.dart';
 
 void main() {
+  testWidgets('phone screen content has the additional top spacing',
+      (tester) async {
+    late EdgeInsets padding;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(360, 800)),
+        child: Builder(builder: (context) {
+          padding = Responsive.screenPadding(context);
+          return const SizedBox.shrink();
+        }),
+      ),
+    );
+    expect(padding.top, 32);
+  });
+
   test('路由模式会保存到本地', () async {
     SharedPreferences.setMockInitialValues({});
     final provider = AppProvider();

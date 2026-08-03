@@ -83,4 +83,22 @@ void main() {
     expect(source, contains('"action": "hijack-dns", "port": [53]'));
     expect(source, isNot(contains('"type": "dns", "tag": "ios-dns"')));
   });
+  test('iOS Tunnel logs a safe AnyTLS configuration summary', () {
+    final source =
+        File('ios/Runner/PacketTunnelProvider.swift').readAsStringSync();
+
+    expect(source, contains('[diagnostic] anytls server='));
+    expect(source, contains('passwordLength='));
+    expect(source, contains('[diagnostic] dns final='));
+    expect(source, contains('logConfigurationSummary'));
+    expect(source, isNot(contains('password:')));
+  });
+
+  test('Flutter logs selected AnyTLS parameters before iOS connect', () {
+    final source = File('lib/providers/app_provider.dart').readAsStringSync();
+
+    expect(source, contains('AnyTLS node summary'));
+    expect(source, contains('serverName=\${node.serverName}'));
+    expect(source, contains('passwordLength='));
+  });
 }
