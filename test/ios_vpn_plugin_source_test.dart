@@ -100,6 +100,8 @@ void main() {
     expect(source, contains('AnyTLS node summary'));
     expect(source, contains('serverName=\${node.serverName}'));
     expect(source, contains('passwordLength='));
+    expect(source, contains('iOS route diagnostics: mode=\${settings.routeMode}'));
+    expect(source, contains("logLevel: 'debug'"));
   });
 
   test('main shell protects mobile content from the system status area', () {
@@ -112,5 +114,7 @@ void main() {
         File('ios/Runner/PacketTunnelProvider.swift').readAsStringSync();
     expect(source, contains('configurationSummary'));
     expect(source, contains('"configSummary"'));
+    expect(source, contains('directRuleSummary'));
+    expect(source, contains('[diagnostic] route final='));
   });
 }

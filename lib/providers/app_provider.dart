@@ -590,10 +590,12 @@ class AppProvider extends ChangeNotifier {
       node: node,
       mode: settings.routeMode,
       tunEnabled: true, // iOS always uses TUN
+      logLevel: 'debug',
     );
     final configJson = singBoxConfigToJson(config);
 
     log('Starting VPN (iOS TUN)...');
+    log('iOS route diagnostics: mode=${settings.routeMode}, logLevel=debug');
     log('Config: ${configJson.length} bytes');
     log('Node: ${node.name} (${node.type.label})');
     if (node.type == NodeType.anytls) {

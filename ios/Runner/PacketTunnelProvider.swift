@@ -242,11 +242,22 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
 
         let route = root["route"] as? [String: Any] ?? [:]
         let routeFinal = route["final"] as? String ?? "<missing>"
-        let routeRules = (route["rules"] as? [[String: Any]] ?? []).count
+        let routeRuleList = route["rules"] as? [[String: Any]] ?? []
+        let routeRules = routeRuleList.count
+        let directRuleSummary = routeRuleList.enumerated().compactMap { index, rule -> String? in
+            guard rule["outbound"] as? String == "direct" else { return nil }
+            let domains = (rule["domain"] as? [String] ?? []).joined(separator: "|")
+            let cidrs = (rule["ip_cidr"] as? [String] ?? []).joined(separator: "|")
+            let ruleSet = (rule["rule_set"] as? [String] ?? []).joined(separator: "|")
+            let match = [domains, cidrs, ruleSet].filter { !$0.isEmpty }.joined(separator: ";")
+            return "\(index):\(match.isEmpty ? "any" : match)"
+        }.joined(separator: ",")
         summary["routeFinal"] = routeFinal
         summary["routeRules"] = routeRules
+        summary["directRuleSummary"] = directRuleSummary
         configurationSummary = summary
         appendLog("[diagnostic] route final=\(routeFinal) rules=\(routeRules)")
+        appendLog("[diagnostic] direct rules=\(directRuleSummary.isEmpty ? "none" : directRuleSummary)")
     }
 
     private func closeRuntime() {
