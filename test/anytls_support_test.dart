@@ -230,11 +230,18 @@ proxies:
     );
     expect(
       routeRules.where((rule) => rule.containsKey('domain_suffix')),
-      isEmpty,
+      contains(
+        predicate<Map>((rule) {
+          final domains = (rule['domain_suffix'] as List?)?.cast<String>() ?? const [];
+          return rule['outbound'] == 'proxy' &&
+              domains.contains('app-analytics-services.com') &&
+              domains.contains('googleapis.com');
+        }),
+      ),
     );
 
     final dns = (config['dns'] as Map).cast<String, dynamic>();
-    expect(dns['final'], 'remote');
+    expect(dns['final'], 'local');
     expect(
       (dns['rules'] as List).cast<Map>(),
       contains({'rule_set': ['geosite-cn'], 'server': 'local'}),

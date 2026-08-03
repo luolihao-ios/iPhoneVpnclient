@@ -10,6 +10,18 @@ const String _singGeositeCnUrl =
 const String _singGeoipCnUrl =
     'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs';
 
+const _foreignDomainOverrides = [
+  'google.com',
+  'googleapis.com',
+  'googlevideo.com',
+  'youtube.com',
+  'youtubei.googleapis.com',
+  'ytimg.com',
+  'gstatic.com',
+  'ggpht.com',
+  'app-analytics-services.com',
+];
+
 /// Official binary sing-box rule sets keep China routing current without
 /// embedding a large, hand-maintained domain/IP list in the app package.
 List<Map<String, dynamic>> _chinaRuleSets() => [
@@ -229,6 +241,11 @@ Map<String, dynamic> buildSingBoxConfig({
     {'ip_is_private': true, 'outbound': 'direct'},
     if (mode == 'rule')
       {
+        'domain_suffix': _foreignDomainOverrides,
+        'outbound': 'proxy',
+      },
+    if (mode == 'rule')
+      {
         'rule_set': ['geosite-cn'],
         'outbound': 'direct',
       },
@@ -262,10 +279,10 @@ Map<String, dynamic> buildSingBoxConfig({
         },
       ],
       'rules': _dnsRulesForNode(node, mode),
-      // Keep the stable local resolver for global mode. The actual external
-      // connection still goes through the proxy; smart routing uses remote
-      // DNS so China-domain classification remains consistent.
-      'final': mode == 'rule' ? 'remote' : 'local',
+      // Keep DNS resolution on the stable local resolver. The China domain/IP
+      // rule sets still decide routing; remote DoT through AnyTLS is unreliable
+      // on some nodes and can block every connection.
+      'final': 'local',
       'strategy': 'prefer_ipv4',
     },
     'inbounds': inbounds,
