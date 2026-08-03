@@ -240,4 +240,22 @@ proxies:
       contains({'rule_set': ['geosite-cn'], 'server': 'local'}),
     );
   });
+
+  test('normalizes pasted subscription URLs from mobile clipboards', () {
+    expect(
+      normalizeSubscriptionInput(
+        '\uFEFF\u200B https://example.com/sub\u00A0\r\n',
+      ),
+      'https://example.com/sub',
+    );
+  });
+
+  test('normalizes wrapped Stash links without zero-width characters', () {
+    expect(
+      normalizeSubscriptionInput(
+        '\u200Bstash://install-config?url=https%3A%2F%2Fexample.com%2Fsub\u200B',
+      ),
+      'stash://install-config?url=https%3A%2F%2Fexample.com%2Fsub',
+    );
+  });
 }

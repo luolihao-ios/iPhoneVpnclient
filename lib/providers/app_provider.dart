@@ -113,6 +113,7 @@ class AppProvider extends ChangeNotifier {
   final WindowsProxyService _windowsProxy;
   Timer? _statsTimer;
   int _latencyBatchId = 0;
+  int _subscriptionRevision = 0;
   bool _isSwitching = false;
 
   /// Platform detection.
@@ -190,6 +191,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> _restoreSubscription() async {
     var restored = false;
+    final revisionAtStart = _subscriptionRevision;
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedRouteMode = prefs.getString(_routeModeKey);
@@ -203,13 +205,13 @@ class AppProvider extends ChangeNotifier {
         restored = true;
       }
       final savedUrl = prefs.getString(_subscriptionUrlKey) ?? '';
-      if (savedUrl.isNotEmpty) {
+      if (savedUrl.isNotEmpty && revisionAtStart == _subscriptionRevision) {
         _subscriptionUrl = savedUrl;
         log('Restored subscription URL from cache');
         restored = true;
       }
       final savedNodes = prefs.getString(_nodesKey);
-      if (savedNodes != null) {
+      if (savedNodes != null && revisionAtStart == _subscriptionRevision) {
         final nodes = decodeNodes(savedNodes);
         if (nodes.isNotEmpty) {
           _nodes = nodes;
@@ -337,12 +339,14 @@ class AppProvider extends ChangeNotifier {
 
   /// Import nodes from a subscription URL.
   Future<void> importSubscription(String url) async {
+    final importRevision = ++_subscriptionRevision;
     final resolvedUrl = resolveSubscriptionInput(url);
     if (resolvedUrl == null) {
       throw Exception(
           'Unsupported subscription link. Paste an HTTPS or Stash install link.');
     }
     final fetchedNodes = await fetchSubscription(resolvedUrl);
+    if (importRevision != _subscriptionRevision) return;
     _latencyBatchId++;
     _nodes = sortNodesByLatency(fetchedNodes);
     _subscriptionUrl = resolvedUrl;
@@ -365,6 +369,7 @@ class AppProvider extends ChangeNotifier {
 
   /// Import nodes from raw subscription text.
   Future<void> importSubscriptionText(String rawText) async {
+    ++_subscriptionRevision;
     final parsedNodes = parseSubscription(rawText);
     _latencyBatchId++;
     _nodes = sortNodesByLatency(parsedNodes);
@@ -657,6 +662,9 @@ class AppProvider extends ChangeNotifier {
   /// Disconnect from current node.
   Future<void> disconnect() async {
     _statsTimer?.cancel();
+    // Invalidate any in-flight node checks so late results cannot repopulate
+    // the dashboard after the VPN has been stopped.
+    _latencyBatchId++;
 
     if (_isiOS) {
       await _iosVpn?.disconnect();

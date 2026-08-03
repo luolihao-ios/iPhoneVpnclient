@@ -379,8 +379,20 @@ VpnNode? _parseLine(String line) {
 }
 
 /// Resolve a pasted subscription URL or an app-specific install wrapper.
+String normalizeSubscriptionInput(String input) {
+  return input
+      .replaceAll('\uFEFF', '')
+      .replaceAll('\u200B', '')
+      .replaceAll('\u200C', '')
+      .replaceAll('\u200D', '')
+      .replaceAll('\u2060', '')
+      .replaceAll('\u00A0', ' ')
+      .replaceAll('\u3000', ' ')
+      .trim();
+}
+
 String? resolveSubscriptionInput(String input) {
-  final text = input.trim();
+  final text = normalizeSubscriptionInput(input);
   if (text.isEmpty) return null;
   final uri = Uri.tryParse(text);
   if (uri == null) return null;
