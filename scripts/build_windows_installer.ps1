@@ -3,6 +3,12 @@ $ErrorActionPreference = 'Stop'
 $workspace = Split-Path -Parent $PSScriptRoot
 $releaseDir = Join-Path $workspace 'build\windows\x64\runner\Release'
 $iss = Join-Path $workspace 'installer\forge-vpn.iss'
+$pubspec = Join-Path $workspace 'pubspec.yaml'
+$versionLine = Get-Content -LiteralPath $pubspec | Where-Object { $_ -match '^version:\s*([^+\s]+)' } | Select-Object -First 1
+if (-not $versionLine -or $versionLine -notmatch '^version:\s*([^+\s]+)') {
+  throw "Unable to read app version from $pubspec"
+}
+$appVersion = $Matches[1]
 $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $iscc) {
   $iscc = @(
@@ -25,7 +31,7 @@ try {
   if (-not (Test-Path (Join-Path $releaseDir 'sing-box.exe'))) {
     throw "Release directory is missing sing-box.exe: $releaseDir"
   }
-  & $iscc $iss
+  & $iscc "/DMyAppVersion=$appVersion" $iss
   if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
   }
