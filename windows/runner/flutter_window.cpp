@@ -51,9 +51,17 @@ void DeleteRegistryValue(const wchar_t* name) {
   }
 }
 
+void NotifyProxySettingsChanged() {
+  SendMessageTimeoutW(
+      HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+      reinterpret_cast<LPARAM>(L"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"),
+      SMTO_ABORTIFHUNG, 1000, nullptr);
+}
+
 void RestoreForgeProxySync() {
   std::wstring marker;
   if (!ReadRegistryString(L"ForgeVPNProxyOwned", &marker) || marker != L"1") {
+    NotifyProxySettingsChanged();
     return;
   }
   DWORD enabled = 0;
@@ -61,12 +69,14 @@ void RestoreForgeProxySync() {
   if (!ReadRegistryDword(L"ProxyEnable", &enabled) ||
       !ReadRegistryString(L"ProxyServer", &server) || enabled != 1 ||
       server != L"127.0.0.1:2080") {
+    NotifyProxySettingsChanged();
     return;
   }
 
   HKEY key = nullptr;
   if (RegOpenKeyExW(HKEY_CURRENT_USER, kInternetSettingsKey, 0, KEY_SET_VALUE,
                     &key) != ERROR_SUCCESS) {
+    NotifyProxySettingsChanged();
     return;
   }
   const wchar_t* names[] = {L"ProxyEnable", L"ProxyServer", L"ProxyOverride"};
@@ -93,6 +103,7 @@ void RestoreForgeProxySync() {
   }
   RegDeleteValueW(key, L"ForgeVPNProxyOwned");
   RegCloseKey(key);
+  NotifyProxySettingsChanged();
 }
 }  // namespace
 
