@@ -24,6 +24,8 @@ import java.net.InetAddress
 import java.net.Inet6Address
 import java.net.NetworkInterface as JavaNetworkInterface
 import java.util.Collections
+import android.os.Handler
+import android.os.Looper
 
 /** Android platform callbacks consumed by the libbox AAR. */
 class LibboxPlatformInterface(
@@ -34,6 +36,8 @@ class LibboxPlatformInterface(
 
     private var tunFileDescriptor: android.os.ParcelFileDescriptor? = null
     private var defaultInterfaceListener: InterfaceUpdateListener? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastDefaultInterface = ""
 
     override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
 
@@ -73,6 +77,14 @@ class LibboxPlatformInterface(
         tunFileDescriptor = pfd
         return pfd.fd
     }
+
+    fun hasTun(): Boolean = tunFileDescriptor != null
+
+    fun diagnosticSnapshot(): Map<String, Any> = mapOf(
+        "tunEstablished" to hasTun(),
+        "defaultInterface" to lastDefaultInterface,
+        "interfaces" to getInterfaceDiagnostics(),
+    )
 
     fun closeTun() {
         tunFileDescriptor?.close()
@@ -153,17 +165,47 @@ class LibboxPlatformInterface(
         }
     }
 
-    override fun clearDNSCache() = Unit
+    override fun clearDNSCache() {
+        VpnBridge.sendLog(vpnService, "[libbox] DNS cache refresh requested")
+        defaultInterfaceListener?.let(::publishDefaultInterface)
+    }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         if (defaultInterfaceListener === listener) {
             defaultInterfaceListener = null
         }
+        networkCallback?.let { callback ->
+            vpnService.getSystemService(ConnectivityManager::class.java)
+                .unregisterNetworkCallback(callback)
+        }
+        networkCallback = null
     }
 
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         defaultInterfaceListener = listener
         publishDefaultInterface(listener)
+        if (networkCallback == null) {
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    publishDefaultInterfaceIfCurrent()
+                }
+
+                override fun onLost(network: android.net.Network) {
+                    publishDefaultInterfaceIfCurrent()
+                }
+            }
+            networkCallback = callback
+            runCatching {
+                vpnService.getSystemService(ConnectivityManager::class.java)
+                    .registerDefaultNetworkCallback(callback)
+            }.onFailure { VpnBridge.sendLog(vpnService, "[libbox] network monitor unavailable: ${it.message}") }
+        }
+    }
+
+    private fun publishDefaultInterfaceIfCurrent() {
+        defaultInterfaceListener?.let { listener ->
+            Handler(Looper.getMainLooper()).post { publishDefaultInterface(listener) }
+        }
     }
 
     /** Publish the emulator's physical default interface, not the VPN TUN. */
@@ -186,6 +228,7 @@ class LibboxPlatformInterface(
                     JavaNetworkInterface.getByName(interfaceName).index
                 }.getOrDefault(-1)
                 if (index >= 0) {
+                    lastDefaultInterface = interfaceName
                     listener.updateDefaultInterface(interfaceName, index, false, false)
                     VpnBridge.sendLog(vpnService, "[libbox] default interface: $interfaceName (index=$index)")
                     return
@@ -194,6 +237,27 @@ class LibboxPlatformInterface(
             Thread.sleep(100)
         }
         listener.updateDefaultInterface("", -1, false, false)
+        lastDefaultInterface = ""
+    }
+
+    private fun getInterfaceDiagnostics(): List<Map<String, Any>> {
+        val connectivity = vpnService.getSystemService(ConnectivityManager::class.java)
+        return connectivity.allNetworks.mapNotNull { network ->
+            val props = connectivity.getLinkProperties(network) ?: return@mapNotNull null
+            val name = props.interfaceName ?: return@mapNotNull null
+            val capabilities = connectivity.getNetworkCapabilities(network)
+            mapOf(
+                "name" to name,
+                "mtu" to (props.mtu ?: 0),
+                "dns" to props.dnsServers.map { formatHostAddress(it) },
+                "type" to when {
+                    capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "wifi"
+                    capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "cellular"
+                    capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> "ethernet"
+                    else -> "other"
+                },
+            )
+        }
     }
 
     override fun getInterfaces(): NetworkInterfaceIterator {

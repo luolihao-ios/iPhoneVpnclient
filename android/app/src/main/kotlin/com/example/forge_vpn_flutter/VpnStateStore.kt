@@ -24,6 +24,11 @@ class VpnStateStore {
         permissionGranted = granted
     }
 
+    fun reset(reason: String = "") {
+        state = VpnRuntimeState.IDLE
+        message = reason
+    }
+
     fun isRunning(): Boolean = state == VpnRuntimeState.CONNECTED
 
     fun snapshot(): Map<String, Any> = mapOf(

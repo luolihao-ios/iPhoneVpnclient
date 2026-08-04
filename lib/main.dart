@@ -140,6 +140,29 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  Widget _buildUpdateBanner(BuildContext context) {
+    return Consumer<AppProvider>(
+      builder: (context, provider, child) {
+        final update = provider.availableUpdate;
+        if (update == null) return const SizedBox.shrink();
+        return MaterialBanner(
+          backgroundColor: const Color(0xFF16382F),
+          content: Text('发现新版本 ${update.version}，建议下载安装。'),
+          actions: [
+            TextButton(
+              onPressed: provider.openUpdate,
+              child: const Text('立即更新'),
+            ),
+            TextButton(
+              onPressed: provider.dismissUpdate,
+              child: const Text('稍后提醒'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final type = Responsive.of(context);
@@ -148,7 +171,14 @@ class _MainShellState extends State<MainShell> {
     if (type == ScreenType.phone) {
       return Scaffold(
         body: SafeArea(
-          child: IndexedStack(index: _currentIndex, children: _pages),
+          child: Column(
+            children: [
+              _buildUpdateBanner(context),
+              Expanded(
+                child: IndexedStack(index: _currentIndex, children: _pages),
+              ),
+            ],
+          ),
         ),
         bottomNavigationBar: _buildBottomNav(l10n),
       );
@@ -161,7 +191,16 @@ class _MainShellState extends State<MainShell> {
           children: [
             _buildNavRail(l10n),
             const VerticalDivider(width: 1, color: Color(0xFF2D3643)),
-            Expanded(child: IndexedStack(index: _currentIndex, children: _pages)),
+            Expanded(
+              child: Column(
+                children: [
+                  _buildUpdateBanner(context),
+                  Expanded(
+                    child: IndexedStack(index: _currentIndex, children: _pages),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

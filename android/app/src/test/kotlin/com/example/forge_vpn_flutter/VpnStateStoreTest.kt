@@ -35,4 +35,16 @@ class VpnStateStoreTest {
         assertTrue(state.snapshot()["permissionGranted"] as Boolean)
         assertFalse(state.isRunning())
     }
+
+    @Test
+    fun `terminal cleanup clears a stale connected state`() {
+        val state = VpnStateStore()
+        state.update(VpnRuntimeState.CONNECTED, "Tunnel established")
+
+        state.reset("Service stopped")
+
+        assertFalse(state.isRunning())
+        assertEquals("idle", state.snapshot()["status"])
+        assertEquals("Service stopped", state.snapshot()["message"])
+    }
 }

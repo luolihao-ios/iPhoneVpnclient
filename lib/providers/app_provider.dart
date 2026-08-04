@@ -12,6 +12,7 @@ import '../core/subscription.dart';
 import '../core/stats.dart';
 import '../core/singbox_config.dart';
 import '../core/desktop_vpn_diagnostics.dart';
+import '../core/update_checker.dart';
 import '../services/singbox_service.dart';
 import '../services/android_vpn_service.dart';
 import '../services/ios_vpn_service.dart';
@@ -115,6 +116,7 @@ class AppProvider extends ChangeNotifier {
   int _latencyBatchId = 0;
   int _subscriptionRevision = 0;
   bool _isSwitching = false;
+  WindowsUpdateInfo? _availableUpdate;
 
   /// Platform detection.
   static bool get _isAndroid =>
@@ -161,6 +163,7 @@ class AppProvider extends ChangeNotifier {
   RuntimeState get runtime => _runtime;
   String get subscriptionUrl => _subscriptionUrl;
   bool get isSwitching => _isSwitching;
+  WindowsUpdateInfo? get availableUpdate => _availableUpdate;
 
   VpnNode? get selectedNode {
     if (nodes.isEmpty) return null;
@@ -187,6 +190,26 @@ class AppProvider extends ChangeNotifier {
         log('Startup node health check failed: $error');
       }));
     }
+    unawaited(checkForUpdates());
+  }
+
+  Future<void> checkForUpdates() async {
+    final update = await fetchWindowsUpdate();
+    if (update == null) return;
+    _availableUpdate = update;
+    notifyListeners();
+  }
+
+  Future<void> openUpdate() async {
+    final update = _availableUpdate;
+    if (update == null) return;
+    await openWindowsUpdate(update);
+  }
+
+  void dismissUpdate() {
+    if (_availableUpdate == null) return;
+    _availableUpdate = null;
+    notifyListeners();
   }
 
   Future<void> _restoreSubscription() async {

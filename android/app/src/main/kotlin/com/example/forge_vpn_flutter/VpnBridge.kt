@@ -66,6 +66,8 @@ object VpnBridge {
         val availableAssets = context.assets.list(assetDirectory)?.toList() ?: emptyList()
         val assetAvailable = assetPath != "unknown" &&
             context.assets.list(assetDirectory)?.contains(assetPath.substringAfterLast('/')) == true
+        val snapshot = state.snapshot()
+        val native = ForgeVpnService.diagnosticSnapshot()
         result.success(
             mapOf(
                 "platform" to "android",
@@ -75,8 +77,16 @@ object VpnBridge {
                 "availableAssets" to availableAssets,
                 "libboxVersion" to runCatching { Libbox.version() }.getOrNull(),
                 "installedBinary" to false,
-                "permissionGranted" to (state.snapshot()["permissionGranted"] ?: false),
-                "status" to (state.snapshot()["status"] ?: "idle")
+                "permissionGranted" to (snapshot["permissionGranted"] ?: false),
+                "status" to (snapshot["status"] ?: "idle"),
+                "message" to (snapshot["message"] ?: ""),
+                "serviceRunning" to (native["serviceRunning"] ?: false),
+                "tunEstablished" to (native["tunEstablished"] ?: false),
+                "commandServerReady" to (native["commandServerReady"] ?: false),
+                "defaultInterface" to (native["defaultInterface"] ?: ""),
+                "interfaces" to (native["interfaces"] ?: emptyList<Map<String, Any>>()),
+                "lastError" to if (snapshot["status"] == "error") snapshot["message"] else "",
+                "sdkInt" to Build.VERSION.SDK_INT,
             )
         )
     }

@@ -29,6 +29,24 @@ class ForgeVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "forge_vpn_channel"
 
+        @Volatile private var activeService: ForgeVpnService? = null
+
+        fun diagnosticSnapshot(): Map<String, Any> = activeService?.let { service ->
+            mapOf(
+                "serviceRunning" to service.running.get(),
+                "tunEstablished" to (service.platform?.hasTun() == true),
+                "commandServerReady" to (service.controller?.diagnosticSnapshot()?.get("commandServerReady") == true),
+                "defaultInterface" to (service.platform?.diagnosticSnapshot()?.get("defaultInterface") ?: ""),
+                "interfaces" to (service.platform?.diagnosticSnapshot()?.get("interfaces") ?: emptyList<Map<String, Any>>()),
+            )
+        } ?: mapOf(
+            "serviceRunning" to false,
+            "tunEstablished" to false,
+            "commandServerReady" to false,
+            "defaultInterface" to "",
+            "interfaces" to emptyList<Map<String, Any>>(),
+        )
+
         fun assetPathForAbi(abi: String): String? {
             val binaryAbi = when (abi) {
                 "arm64-v8a" -> "arm64"
@@ -43,6 +61,7 @@ class ForgeVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        activeService = this
         createNotificationChannel()
     }
 
@@ -65,6 +84,7 @@ class ForgeVpnService : VpnService() {
 
     override fun onDestroy() {
         disconnect(reportStatus = false)
+        if (activeService === this) activeService = null
         super.onDestroy()
     }
 

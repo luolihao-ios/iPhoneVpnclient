@@ -17,6 +17,7 @@ class LibboxServiceController(
 ) : CommandServerHandler {
 
     private var commandServer: CommandServer? = null
+    private var started = false
 
     @Synchronized
     fun start(configJson: String) {
@@ -34,6 +35,7 @@ class LibboxServiceController(
             setExcludePackage(LibboxPlatformInterface.StringArray(listOf(packageName).iterator()))
         }
         server.startOrReloadService(configJson, override)
+        started = true
     }
 
     @Synchronized
@@ -47,7 +49,14 @@ class LibboxServiceController(
                 .onFailure { Log.w(TAG, "failed to close libbox command server", it) }
         }
         platform.closeTun()
+        started = false
     }
+
+    fun diagnosticSnapshot(): Map<String, Any> = mapOf(
+        "commandServerReady" to (commandServer != null),
+        "serviceStarted" to started,
+        "tunEstablished" to platform.hasTun(),
+    )
 
     private fun setupLibbox() {
         val context = platform.context()

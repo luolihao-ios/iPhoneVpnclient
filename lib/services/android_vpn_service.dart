@@ -28,6 +28,31 @@ class AndroidVpnService {
   Completer<bool>? _permissionRequest;
   bool get hasPermission => _permissionGranted;
 
+  /// Converts the loosely typed platform-channel response into a stable map.
+  /// Android versions and libbox builds may omit optional diagnostic fields;
+  /// callers should still receive predictable defaults.
+  static Map<String, dynamic> normalizeDiagnostics(Map<dynamic, dynamic> raw) {
+    final interfaces = raw['interfaces'];
+    return <String, dynamic>{
+      'platform': raw['platform'] is String ? raw['platform'] : 'android',
+      'status': raw['status'] is String ? raw['status'] : 'idle',
+      'message': raw['message'] is String ? raw['message'] : '',
+      'permissionGranted': raw['permissionGranted'] == true,
+      'serviceRunning': raw['serviceRunning'] == true,
+      'tunEstablished': raw['tunEstablished'] == true,
+      'commandServerReady': raw['commandServerReady'] == true,
+      'defaultInterface':
+          raw['defaultInterface'] is String ? raw['defaultInterface'] : '',
+      'interfaces': interfaces is List
+          ? interfaces.whereType<Map>().map((entry) =>
+              Map<String, dynamic>.from(entry)).toList(growable: false)
+          : const <Map<String, dynamic>>[],
+      'lastError': raw['lastError'] is String ? raw['lastError'] : '',
+      'abi': raw['abi'] is String ? raw['abi'] : 'unknown',
+      'sdkInt': raw['sdkInt'] is int ? raw['sdkInt'] : 0,
+    };
+  }
+
   /// Request VPN permission from the user.
   Future<bool> requestPermission() async {
     if (_permissionGranted) return true;
@@ -108,7 +133,7 @@ class AndroidVpnService {
   Future<Map<String, dynamic>> diagnose() async {
     try {
       final result = await _channel.invokeMethod<Map>('diagnose');
-      return Map<String, dynamic>.from(result ?? const {});
+      return normalizeDiagnostics(result ?? const {});
     } catch (e) {
       return {'error': e.toString()};
     }
