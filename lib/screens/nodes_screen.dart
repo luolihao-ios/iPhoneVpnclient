@@ -190,20 +190,20 @@ class _NodeStatusBadge extends StatelessWidget {
       return (
         label: l10n.connected,
         bg: const Color(0xFF21B892).withValues(alpha: 0.18),
-        fg: const Color(0xFFBDFFED),
+        fg: const Color(0xFF08785F),
       );
     }
     if (selected) {
       return (
         label: l10n.selected,
-        bg: const Color(0xFF5D8CFF).withValues(alpha: 0.22),
-        fg: const Color(0xFFDCE8FF),
+        bg: const Color(0xFF1478E8).withValues(alpha: 0.12),
+        fg: const Color(0xFF0A5FC6),
       );
     }
     return (
       label: l10n.ready,
-      bg: const Color(0xFF5D8CFF).withValues(alpha: 0.16),
-      fg: const Color(0xFFCFE6FF),
+      bg: const Color(0xFFEAF2FF),
+      fg: const Color(0xFF315A9B),
     );
   }
 }

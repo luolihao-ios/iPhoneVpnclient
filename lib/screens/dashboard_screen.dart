@@ -321,7 +321,7 @@ class _ServerTable extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFEEF3F8))),
+                        color: Responsive.textPrimary)),
                 const Spacer(),
                 _buildHeaderActions(l10n),
               ],
@@ -411,7 +411,7 @@ class _TableNodeList extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(color: Responsive.borderColor),
         borderRadius: BorderRadius.circular(8),
-        color: const Color(0xFF10161F),
+        color: Colors.white,
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -421,8 +421,8 @@ class _TableNodeList extends StatelessWidget {
             height: 38,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: const BoxDecoration(
-              color: Color(0xFF121923),
-              border: Border(bottom: BorderSide(color: Color(0xFF2D3643))),
+              color: Color(0xFFEAF3FA),
+              border: Border(bottom: BorderSide(color: Color(0xFFD6E0EA))),
             ),
             child: _buildHeader(AppLocalizations.of(context)),
           ),
@@ -645,7 +645,7 @@ class _PhoneNodeList extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFF121923),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Responsive.borderColor),
             ),
@@ -659,7 +659,7 @@ class _PhoneNodeList extends StatelessWidget {
                       Text(group.regionCode.localizedRegionName(l10n),
                           style: const TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFFEEF3F8))),
+                              color: Color(0xFF16243A))),
                       const Spacer(),
                       Text(l10n.totalCount(group.nodes.length),
                           style:
@@ -796,11 +796,11 @@ class _AvailabilityPill extends StatelessWidget {
   Color _fg() {
     switch (node.healthStatus) {
       case HealthStatus.available:
-        return const Color(0xFFBDFFED);
+        return const Color(0xFF08785F);
       case HealthStatus.unavailable:
-        return const Color(0xFFFFBAB4);
+        return const Color(0xFFB33A32);
       case HealthStatus.checking:
-        return const Color(0xFFFFE1AD);
+        return const Color(0xFF9A6300);
       case HealthStatus.unknown:
         return Colors.grey[500]!;
     }
@@ -861,20 +861,20 @@ class _StatusPill extends StatelessWidget {
       return (
         label: l10n.connected,
         bg: const Color(0xFF21B892).withValues(alpha: 0.18),
-        fg: const Color(0xFFBDFFED),
+        fg: const Color(0xFF08785F),
       );
     }
     if (isSelected) {
       return (
         label: l10n.selected,
-        bg: const Color(0xFF5D8CFF).withValues(alpha: 0.22),
-        fg: const Color(0xFFDCE8FF),
+        bg: const Color(0xFF1478E8).withValues(alpha: 0.12),
+        fg: const Color(0xFF0A5FC6),
       );
     }
     return (
       label: l10n.ready,
-      bg: const Color(0xFF5D8CFF).withValues(alpha: 0.16),
-      fg: const Color(0xFFCFE6FF),
+      bg: const Color(0xFFEAF2FF),
+      fg: const Color(0xFF315A9B),
     );
   }
 }

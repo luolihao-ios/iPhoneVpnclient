@@ -37,22 +37,39 @@ class ForgeVpnApp extends StatelessWidget {
         theme: ThemeData(
           brightness: Brightness.light,
           scaffoldBackgroundColor: Responsive.bgColor,
-          colorScheme: const ColorScheme.light(
-            primary: Color(0xFF21B892),
-            secondary: Color(0xFF5D8CFF),
+          colorScheme: ColorScheme.light(
+            primary: Responsive.brandBlue,
+            secondary: Responsive.accent,
             error: Color(0xFFE15D52),
             surface: Colors.white,
           ),
-          appBarTheme: const AppBarTheme(
+          appBarTheme: AppBarTheme(
             backgroundColor: Colors.white,
             elevation: 0,
             centerTitle: true,
+            foregroundColor: Responsive.textPrimary,
           ),
           bottomNavigationBarTheme: const BottomNavigationBarThemeData(
             backgroundColor: Colors.white,
-            selectedItemColor: Color(0xFF21B892),
+            selectedItemColor: Color(0xFF1478E8),
             unselectedItemColor: Color(0xFF657083),
             type: BottomNavigationBarType.fixed,
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Responsive.borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Responsive.borderColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Responsive.brandBlue, width: 2),
+            ),
           ),
           useMaterial3: true,
         ),
@@ -128,8 +145,12 @@ class _MainShellState extends State<MainShell> {
       selectedIndex: _currentIndex,
       onDestinationSelected: (i) => setState(() => _currentIndex = i),
       labelType: NavigationRailLabelType.all,
-      backgroundColor: Colors.white,
-      indicatorColor: const Color(0xFF21B892).withValues(alpha: 0.15),
+      backgroundColor: Responsive.sidebarColor,
+      indicatorColor: Responsive.brandBlue.withValues(alpha: 0.14),
+      selectedIconTheme: IconThemeData(color: Responsive.brandBlue),
+      unselectedIconTheme: IconThemeData(color: Responsive.textSecondary),
+      selectedLabelTextStyle: TextStyle(color: Responsive.brandBlue),
+      unselectedLabelTextStyle: TextStyle(color: Responsive.textSecondary),
       destinations: navItems
           .map((e) => NavigationRailDestination(
                 icon: Icon(e.icon),
@@ -140,13 +161,48 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  Widget _buildDesktopHeader() {
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Responsive.brandBlueDark, Responsive.brandBlue],
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Row(
+        children: [
+          const Icon(Icons.shield_outlined, color: Colors.white, size: 28),
+          const SizedBox(width: 10),
+          const Text(
+            'Forge VPN',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 21,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            'Windows',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.82),
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildUpdateBanner(BuildContext context) {
     return Consumer<AppProvider>(
       builder: (context, provider, child) {
         final update = provider.availableUpdate;
         if (update == null) return const SizedBox.shrink();
         return MaterialBanner(
-          backgroundColor: const Color(0xFF16382F),
+          backgroundColor: const Color(0xFFEAF2FF),
           content: Text('发现新版本 ${update.version}，建议下载安装。'),
           actions: [
             TextButton(
@@ -184,19 +240,26 @@ class _MainShellState extends State<MainShell> {
       );
     }
 
-    // Tablet + desktop: NavigationRail + body
+    // Tablet + desktop: blue header + light NavigationRail + body
     return Scaffold(
       body: SafeArea(
-        child: Row(
+        child: Column(
           children: [
-            _buildNavRail(l10n),
-            const VerticalDivider(width: 1, color: Color(0xFFD7DEE8)),
+            _buildDesktopHeader(),
             Expanded(
-              child: Column(
+              child: Row(
                 children: [
-                  _buildUpdateBanner(context),
+                  _buildNavRail(l10n),
+                  const VerticalDivider(width: 1, color: Color(0xFFD6E0EA)),
                   Expanded(
-                    child: IndexedStack(index: _currentIndex, children: _pages),
+                    child: Column(
+                      children: [
+                        _buildUpdateBanner(context),
+                        Expanded(
+                          child: IndexedStack(index: _currentIndex, children: _pages),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

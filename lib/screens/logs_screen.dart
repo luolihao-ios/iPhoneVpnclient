@@ -124,7 +124,7 @@ class _ActionBar extends StatelessWidget {
               onPressed: logs.isEmpty ? null : () => _export(buttonContext),
               icon: const Icon(Icons.ios_share_outlined),
               color: const Color(0xFF21B892),
-              disabledColor: const Color(0xFF4D5664),
+              disabledColor: const Color(0xFFB8C2CE),
             ),
           ),
         ],
