@@ -1,5 +1,5 @@
 #define MyAppName "Forge VPN"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.1"
 #define MyAppPublisher "Forge VPN"
 #define MyAppExeName "forge_vpn_flutter.exe"
 
