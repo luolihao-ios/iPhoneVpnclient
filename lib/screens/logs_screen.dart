@@ -33,7 +33,7 @@ class LogsScreen extends StatelessWidget {
                 child: logs.isEmpty
                     ? Center(
                         child: Text(l10n.noLogsYet,
-                            style: TextStyle(color: Color(0xFF8B949E))))
+                            style: TextStyle(color: Color(0xFF657083))))
                     : ListView.builder(
                         padding: const EdgeInsets.all(12),
                         itemCount: logs.length,
@@ -44,7 +44,7 @@ class LogsScreen extends StatelessWidget {
                             style: const TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 11,
-                              color: Color(0xFF8B949E),
+                              color: Color(0xFF657083),
                               height: 1.4,
                             ),
                           ),
@@ -107,9 +107,9 @@ class _ActionBar extends StatelessWidget {
               label: Text(AppLocalizations.of(context).checkVpn,
                   style: const TextStyle(fontSize: 13)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1D2530),
-                foregroundColor: const Color(0xFFEEF3F8),
-                side: const BorderSide(color: Color(0xFF2D3643)),
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF172033),
+                side: const BorderSide(color: Color(0xFFD7DEE8)),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
                 padding:

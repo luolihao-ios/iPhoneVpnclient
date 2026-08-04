@@ -114,7 +114,7 @@ class _StatusCard extends StatelessWidget {
                   const Color(0xFF21B892).withValues(alpha: 0.1),
                   Responsive.bgColor
                 ]
-              : [const Color(0xFF1D2530), Responsive.bgColor],
+              : [Colors.white, Responsive.bgColor],
         ),
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
@@ -136,7 +136,7 @@ class _StatusCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFEEF3F8),
+                        color: Responsive.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -144,7 +144,7 @@ class _StatusCard extends StatelessWidget {
                       node != null
                           ? '${node!.type.localizedLabel(l10n)} · ${node!.server}:${node!.port}'
                           : l10n.importSubscriptionFirst,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF657083)),
                     ),
                   ],
                 ),
@@ -173,7 +173,7 @@ class _StatusCard extends StatelessWidget {
                   child: Center(
                     child: Icon(
                       connected ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                      color: connected ? Colors.white : const Color(0xFF062019),
+                      color: connected ? Colors.white : const Color(0xFF172033),
                       size: 32,
                     ),
                   ),
@@ -186,7 +186,7 @@ class _StatusCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               child: Text(runtime.proxyWarning,
                   style:
-                      const TextStyle(color: Color(0xFFFFBAB4), fontSize: 12)),
+                      const TextStyle(color: Color(0xFFB33A32), fontSize: 12)),
             ),
         ],
       ),
@@ -246,13 +246,13 @@ class _MCard extends StatelessWidget {
         child: Column(
           children: [
             Text(label.toUpperCase(),
-                style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                style: TextStyle(fontSize: 10, color: Color(0xFF657083))),
             const SizedBox(height: 6),
             Text(value,
                 style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFEEF3F8))),
+                    color: Color(0xFF172033))),
           ],
         ),
       ),
@@ -307,7 +307,7 @@ class _ServerTable extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFEEF3F8))),
+                        color: Color(0xFF172033))),
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
@@ -335,7 +335,7 @@ class _ServerTable extends StatelessWidget {
               height: 86,
               alignment: Alignment.center,
               child: Text(l10n.noSubscriptionServers,
-                  style: TextStyle(color: Colors.grey[600])),
+                  style: TextStyle(color: Color(0xFF657083))),
             )
           else
             isPhone
@@ -367,9 +367,9 @@ class _ServerTable extends StatelessWidget {
           child: TextButton(
             onPressed: checkingNodes || nodes.isEmpty ? null : onCheckAll,
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFEEF3F8),
-              backgroundColor: const Color(0xFF1D2530),
-              side: const BorderSide(color: Color(0xFF2D3643)),
+              foregroundColor: const Color(0xFF172033),
+              backgroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFFD7DEE8)),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(7)),
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -448,15 +448,15 @@ class _TableNodeList extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: const Color(0xFF18222C),
+          color: const Color(0xFFEAF0F6),
           child: Row(
             children: [
               Text(group.regionCode.localizedRegionName(l10n),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Color(0xFFEEF3F8))),
+                      fontWeight: FontWeight.bold, color: Color(0xFF172033))),
               const Spacer(),
               Text(l10n.totalCount(group.nodes.length),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                  style: TextStyle(fontSize: 12, color: Color(0xFF657083))),
             ],
           ),
         ),
@@ -532,7 +532,7 @@ class _TableNodeList extends StatelessWidget {
               child: Text(
                 node.name,
                 style: const TextStyle(
-                    fontWeight: FontWeight.bold, color: Color(0xFFEEF3F8)),
+                    fontWeight: FontWeight.bold, color: Color(0xFF172033)),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -549,7 +549,7 @@ class _TableNodeList extends StatelessWidget {
                 child: Text(
                   node.type.localizedLabel(l10n),
                   style:
-                      const TextStyle(fontSize: 12, color: Color(0xFFDCE8FF)),
+                      const TextStyle(fontSize: 12, color: Color(0xFF28416E)),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -559,7 +559,7 @@ class _TableNodeList extends StatelessWidget {
               flex: 12,
               child: Text(
                 '${node.server}:${node.port}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 12, color: Color(0xFF657083)),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -711,7 +711,7 @@ class _NodeRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF1D2530),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected ? Responsive.accent : Responsive.borderColor,
@@ -726,7 +726,7 @@ class _NodeRow extends StatelessWidget {
                     Text(node.name,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFFEEF3F8))),
+                            color: Color(0xFF172033))),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -736,7 +736,7 @@ class _NodeRow extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500]),
+                                fontSize: 12, color: Color(0xFF657083)),
                           ),
                         ),
                         const SizedBox(width: 8),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../widgets/responsive.dart';
 import '../l10n/app_localizations.dart';
+import '../core/update_checker.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -29,9 +30,9 @@ class SettingsScreen extends StatelessWidget {
                     trailing: DropdownButton<String>(
                       value: settings.routeMode,
                       underline: const SizedBox(),
-                      dropdownColor: const Color(0xFF161B22),
+                      dropdownColor: Colors.white,
                       style: const TextStyle(
-                          color: Color(0xFFEEF3F8), fontSize: 14),
+                          color: Color(0xFF172033), fontSize: 14),
                       items: [
                         DropdownMenuItem(
                             value: 'global', child: Text(l10n.globalProxy)),
@@ -56,16 +57,16 @@ class SettingsScreen extends StatelessWidget {
                 title: l10n.systemProxy,
                 subtitle: l10n.systemProxyManaged,
                 trailing: Checkbox(
-                    value: settings.systemProxy,
-                    onChanged: connected
-                        ? null
-                        : (value) => provider.saveSettings(
-                            settings.copyWith(systemProxy: value ?? false)),
-                    activeColor: const Color(0xFF21B892),
-                    checkColor: const Color(0xFF062019),
-                    fillColor: WidgetStateProperty.all(
-                        const Color(0xFF21B892).withValues(alpha: 0.3)),
-                  ),
+                  value: settings.systemProxy,
+                  onChanged: connected
+                      ? null
+                      : (value) => provider.saveSettings(
+                          settings.copyWith(systemProxy: value ?? false)),
+                  activeColor: const Color(0xFF21B892),
+                  checkColor: Colors.white,
+                  fillColor: WidgetStateProperty.all(
+                      const Color(0xFF21B892).withValues(alpha: 0.2)),
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -77,15 +78,15 @@ class SettingsScreen extends StatelessWidget {
                   _SettingRow(
                     icon: Icons.info_outline,
                     title: l10n.version,
-                    trailing: const Text('0.1.0',
-                        style: TextStyle(color: Color(0xFF8B949E))),
+                    trailing: const Text(currentWindowsVersion,
+                        style: TextStyle(color: Color(0xFF657083))),
                   ),
-                  const Divider(color: Color(0xFF2D3643), height: 1),
+                  const Divider(color: Color(0xFFD7DEE8), height: 1),
                   _SettingRow(
                     icon: Icons.code,
                     title: l10n.engine,
                     trailing: const Text('sing-box',
-                        style: TextStyle(color: Color(0xFF8B949E))),
+                        style: TextStyle(color: Color(0xFF657083))),
                   ),
                 ],
               ),
@@ -107,7 +108,7 @@ class _GroupHeader extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4),
       child: Text(title.toUpperCase(),
           style: TextStyle(
-              fontSize: 11, color: Colors.grey[500], letterSpacing: 1)),
+              fontSize: 11, color: Color(0xFF657083), letterSpacing: 1)),
     );
   }
 }
@@ -148,7 +149,7 @@ class _SettingRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: Colors.grey[400]),
+          Icon(icon, size: 20, color: Color(0xFF657083)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -156,11 +157,11 @@ class _SettingRow extends StatelessWidget {
               children: [
                 Text(title,
                     style: const TextStyle(
-                        color: Color(0xFFEEF3F8), fontSize: 14)),
+                        color: Color(0xFF172033), fontSize: 14)),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
                   Text(subtitle!,
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                      style: TextStyle(fontSize: 11, color: Color(0xFF657083))),
                 ],
               ],
             ),

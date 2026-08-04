@@ -49,11 +49,11 @@ class _NodesScreenState extends State<NodesScreen> {
                               style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFFEEF3F8))),
+                                  color: Color(0xFF172033))),
                           const Spacer(),
                           Text(l10n.totalCount(provider.nodes.length),
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey[500])),
+                                  fontSize: 12, color: Color(0xFF657083))),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -62,7 +62,7 @@ class _NodesScreenState extends State<NodesScreen> {
                           height: 80,
                           alignment: Alignment.center,
                           child: Text(l10n.noNodesPasteUrl,
-                              style: TextStyle(color: Colors.grey[600])),
+                              style: TextStyle(color: Color(0xFF657083))),
                         )
                       else
                         ...provider.nodes.map((node) => _NodeTile(
@@ -134,12 +134,12 @@ class _NodeTile extends StatelessWidget {
                     Text(node.name,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFFEEF3F8))),
+                            color: Color(0xFF172033))),
                     const SizedBox(height: 4),
                     Text(
                         '${node.type.localizedLabel(l10n)} · ${node.server}:${node.port}',
                         style:
-                            TextStyle(fontSize: 12, color: Colors.grey[500])),
+                            TextStyle(fontSize: 12, color: Color(0xFF657083))),
                   ],
                 ),
               ),

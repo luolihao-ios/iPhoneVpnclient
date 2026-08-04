@@ -46,10 +46,10 @@ class Responsive {
   }
 
   /// Border / divider colour used throughout the app.
-  static Color get borderColor => const Color(0xFF2D3643);
-  static Color get surfaceColor => const Color(0xFF161B22);
-  static Color get bgColor => const Color(0xFF0D1117);
-  static Color get textPrimary => const Color(0xFFEEF3F8);
+  static Color get borderColor => const Color(0xFFD7DEE8);
+  static Color get surfaceColor => Colors.white;
+  static Color get bgColor => const Color(0xFFF4F7FB);
+  static Color get textPrimary => const Color(0xFF172033);
   static Color get accent => const Color(0xFF21B892);
   static Color get error => const Color(0xFFE15D52);
 }

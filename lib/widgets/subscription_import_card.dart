@@ -105,7 +105,7 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
                         child: Text(
                           l10n.subscriptionUrl,
                           style:
-                              TextStyle(fontSize: 12, color: Colors.grey[500]),
+                              TextStyle(fontSize: 12, color: Color(0xFF657083)),
                         ),
                       ),
                       Icon(
@@ -113,7 +113,7 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
                             ? Icons.keyboard_arrow_up
                             : Icons.keyboard_arrow_down,
                         size: 20,
-                        color: Colors.grey[500],
+                        color: Color(0xFF657083),
                       ),
                     ],
                   ),
@@ -129,7 +129,7 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
                   onTapOutside: (_) => _dismissKeyboard(),
                   decoration: InputDecoration(
                     hintText: 'https://...',
-                    hintStyle: TextStyle(color: Colors.grey[700]),
+                    hintStyle: TextStyle(color: Color(0xFF8A95A6)),
                     filled: true,
                     fillColor: Responsive.bgColor,
                     border: _border(),
@@ -139,7 +139,7 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
                     contentPadding: const EdgeInsets.all(12),
                   ),
                   style:
-                      const TextStyle(fontSize: 14, color: Color(0xFFEEF3F8)),
+                      const TextStyle(fontSize: 14, color: Color(0xFF172033)),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -165,7 +165,7 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
     );
   }
 
-  OutlineInputBorder _border([Color color = const Color(0xFF2D3643)]) {
+  OutlineInputBorder _border([Color color = const Color(0xFFD7DEE8)]) {
     return OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
       borderSide: BorderSide(color: color),

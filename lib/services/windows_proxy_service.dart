@@ -3,6 +3,10 @@ import 'dart:io';
 
 const _internetSettingsKey =
     r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
+const _ownedMarker = 'ForgeVPNProxyOwned';
+const _beforeEnableKey = 'ForgeVPNProxyBeforeEnable';
+const _beforeServerKey = 'ForgeVPNProxyBeforeServer';
+const _beforeOverrideKey = 'ForgeVPNProxyBeforeOverride';
 
 abstract class WindowsRegistryAdapter {
   Future<String?> read(String name);
@@ -12,7 +16,8 @@ abstract class WindowsRegistryAdapter {
 
 class ProcessWindowsRegistryAdapter implements WindowsRegistryAdapter {
   String? _readSync(String name) {
-    final result = Process.runSync('reg', ['query', _internetSettingsKey, '/v', name]);
+    final result =
+        Process.runSync('reg', ['query', _internetSettingsKey, '/v', name]);
     if (result.exitCode != 0) return null;
     final line = result.stdout
         .toString()
@@ -41,20 +46,24 @@ class ProcessWindowsRegistryAdapter implements WindowsRegistryAdapter {
       '/f',
     ]);
     if (result.exitCode != 0) {
-      throw ProcessException('reg', [], result.stderr.toString(), result.exitCode);
+      throw ProcessException(
+          'reg', [], result.stderr.toString(), result.exitCode);
     }
   }
 
   void _deleteSync(String name) {
-    final result = Process.runSync('reg', ['delete', _internetSettingsKey, '/v', name, '/f']);
+    final result = Process.runSync(
+        'reg', ['delete', _internetSettingsKey, '/v', name, '/f']);
     if (result.exitCode != 0 && result.exitCode != 1) {
-      throw ProcessException('reg', [], result.stderr.toString(), result.exitCode);
+      throw ProcessException(
+          'reg', [], result.stderr.toString(), result.exitCode);
     }
   }
 
   @override
   Future<String?> read(String name) async {
-    final result = await Process.run('reg', ['query', _internetSettingsKey, '/v', name]);
+    final result =
+        await Process.run('reg', ['query', _internetSettingsKey, '/v', name]);
     if (result.exitCode != 0) return null;
     final line = result.stdout
         .toString()
@@ -84,15 +93,18 @@ class ProcessWindowsRegistryAdapter implements WindowsRegistryAdapter {
       '/f',
     ]);
     if (result.exitCode != 0) {
-      throw ProcessException('reg', [], result.stderr.toString(), result.exitCode);
+      throw ProcessException(
+          'reg', [], result.stderr.toString(), result.exitCode);
     }
   }
 
   @override
   Future<void> delete(String name) async {
-    final result = await Process.run('reg', ['delete', _internetSettingsKey, '/v', name, '/f']);
+    final result = await Process.run(
+        'reg', ['delete', _internetSettingsKey, '/v', name, '/f']);
     if (result.exitCode != 0 && result.exitCode != 1) {
-      throw ProcessException('reg', [], result.stderr.toString(), result.exitCode);
+      throw ProcessException(
+          'reg', [], result.stderr.toString(), result.exitCode);
     }
   }
 }
@@ -110,8 +122,16 @@ class WindowsProxyService {
 
   Future<void> enable({required String proxyServer}) async {
     if (_owned.isEmpty) {
-      for (final name in const ['ProxyEnable', 'ProxyServer', 'ProxyOverride']) {
+      for (final name in const [
+        'ProxyEnable',
+        'ProxyServer',
+        'ProxyOverride'
+      ]) {
         _before[name] = await _registry.read(name);
+      }
+      final persistedOwner = await _registry.read(_ownedMarker);
+      if (persistedOwner != '1') {
+        await _persistBeforeSettings();
       }
     }
     await _registry.write('ProxyEnable', '1', type: 'REG_DWORD');
@@ -122,6 +142,25 @@ class WindowsProxyService {
     _restored = false;
   }
 
+  /// Recover proxy settings left behind by a previous process or reboot.
+  /// Only restore when the current registry values still match Forge VPN's
+  /// local proxy, so a user's manual changes are never overwritten.
+  Future<void> recoverStaleSettings() async {
+    if (await _registry.read(_ownedMarker) != '1') return;
+    final currentEnable = await _registry.read('ProxyEnable');
+    final currentServer = await _registry.read('ProxyServer');
+    if (currentEnable != '1' || currentServer != '127.0.0.1:2080') {
+      await _clearPersistedSettings();
+      return;
+    }
+    final before = <String, String?>{
+      'ProxyEnable': await _registry.read(_beforeEnableKey),
+      'ProxyServer': await _registry.read(_beforeServerKey),
+      'ProxyOverride': await _registry.read(_beforeOverrideKey),
+    };
+    await _restoreValues(before);
+  }
+
   Future<void> restore() async {
     if (_restored || _owned.isEmpty) return;
     try {
@@ -129,15 +168,7 @@ class WindowsProxyService {
       final currentServer = await _registry.read('ProxyServer');
       if (currentEnable == _owned['ProxyEnable'] &&
           currentServer == _owned['ProxyServer']) {
-        for (final name in const ['ProxyEnable', 'ProxyServer', 'ProxyOverride']) {
-          final value = _before[name];
-          if (value == null) {
-            await _registry.delete(name);
-          } else {
-            final type = name == 'ProxyEnable' ? 'REG_DWORD' : 'REG_SZ';
-            await _registry.write(name, value, type: type);
-          }
-        }
+        await _restoreValues(_before);
       }
     } finally {
       _owned.clear();
@@ -158,7 +189,11 @@ class WindowsProxyService {
       final currentServer = registry._readSync('ProxyServer');
       if (currentEnable == _owned['ProxyEnable'] &&
           currentServer == _owned['ProxyServer']) {
-        for (final name in const ['ProxyEnable', 'ProxyServer', 'ProxyOverride']) {
+        for (final name in const [
+          'ProxyEnable',
+          'ProxyServer',
+          'ProxyOverride'
+        ]) {
           final value = _before[name];
           if (value == null) {
             registry._deleteSync(name);
@@ -167,11 +202,60 @@ class WindowsProxyService {
             registry._writeSync(name, value, type: type);
           }
         }
+        for (final name in const [
+          _ownedMarker,
+          _beforeEnableKey,
+          _beforeServerKey,
+          _beforeOverrideKey,
+        ]) {
+          registry._deleteSync(name);
+        }
       }
     } finally {
       _owned.clear();
       _before.clear();
       _restored = true;
+    }
+  }
+
+  Future<void> _persistBeforeSettings() async {
+    final values = <String, String?>{
+      _beforeEnableKey: _before['ProxyEnable'],
+      _beforeServerKey: _before['ProxyServer'],
+      _beforeOverrideKey: _before['ProxyOverride'],
+    };
+    for (final entry in values.entries) {
+      final value = entry.value;
+      if (value == null) {
+        await _registry.delete(entry.key);
+      } else {
+        await _registry.write(entry.key, value, type: 'REG_SZ');
+      }
+    }
+    await _registry.write(_ownedMarker, '1', type: 'REG_SZ');
+  }
+
+  Future<void> _restoreValues(Map<String, String?> values) async {
+    for (final name in const ['ProxyEnable', 'ProxyServer', 'ProxyOverride']) {
+      final value = values[name];
+      if (value == null) {
+        await _registry.delete(name);
+      } else {
+        final type = name == 'ProxyEnable' ? 'REG_DWORD' : 'REG_SZ';
+        await _registry.write(name, value, type: type);
+      }
+    }
+    await _clearPersistedSettings();
+  }
+
+  Future<void> _clearPersistedSettings() async {
+    for (final name in const [
+      _ownedMarker,
+      _beforeEnableKey,
+      _beforeServerKey,
+      _beforeOverrideKey,
+    ]) {
+      await _registry.delete(name);
     }
   }
 }

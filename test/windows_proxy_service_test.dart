@@ -43,4 +43,17 @@ void main() {
 
     expect(registry.values['ProxyServer'], 'manual:9000');
   });
+
+  test('重启后恢复 Forge VPN 接管前的系统代理', () async {
+    final registry = MemoryRegistry()
+      ..values.addAll({'ProxyEnable': '0', 'ProxyServer': 'old:8080'});
+    await WindowsProxyService(registry: registry)
+        .enable(proxyServer: '127.0.0.1:2080');
+
+    await WindowsProxyService(registry: registry).recoverStaleSettings();
+
+    expect(registry.values['ProxyEnable'], '0');
+    expect(registry.values['ProxyServer'], 'old:8080');
+    expect(registry.values.containsKey('ForgeVPNProxyOwned'), isFalse);
+  });
 }

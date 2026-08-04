@@ -35,23 +35,23 @@ class ForgeVpnApp extends StatelessWidget {
         localeListResolutionCallback: (locales, supportedLocales) =>
             resolveForgeLocale(locales),
         theme: ThemeData(
-          brightness: Brightness.dark,
+          brightness: Brightness.light,
           scaffoldBackgroundColor: Responsive.bgColor,
-          colorScheme: const ColorScheme.dark(
+          colorScheme: const ColorScheme.light(
             primary: Color(0xFF21B892),
             secondary: Color(0xFF5D8CFF),
             error: Color(0xFFE15D52),
-            surface: Color(0xFF161B22),
+            surface: Colors.white,
           ),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF0D1117),
+            backgroundColor: Colors.white,
             elevation: 0,
             centerTitle: true,
           ),
           bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-            backgroundColor: Color(0xFF0D1117),
+            backgroundColor: Colors.white,
             selectedItemColor: Color(0xFF21B892),
-            unselectedItemColor: Color(0xFF8B949E),
+            unselectedItemColor: Color(0xFF657083),
             type: BottomNavigationBarType.fixed,
           ),
           useMaterial3: true,
@@ -128,7 +128,7 @@ class _MainShellState extends State<MainShell> {
       selectedIndex: _currentIndex,
       onDestinationSelected: (i) => setState(() => _currentIndex = i),
       labelType: NavigationRailLabelType.all,
-      backgroundColor: const Color(0xFF111720),
+      backgroundColor: Colors.white,
       indicatorColor: const Color(0xFF21B892).withValues(alpha: 0.15),
       destinations: navItems
           .map((e) => NavigationRailDestination(
@@ -190,7 +190,7 @@ class _MainShellState extends State<MainShell> {
         child: Row(
           children: [
             _buildNavRail(l10n),
-            const VerticalDivider(width: 1, color: Color(0xFF2D3643)),
+            const VerticalDivider(width: 1, color: Color(0xFFD7DEE8)),
             Expanded(
               child: Column(
                 children: [

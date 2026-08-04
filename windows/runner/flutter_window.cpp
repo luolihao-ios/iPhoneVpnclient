@@ -2,9 +2,99 @@
 
 #include <optional>
 #include <shellapi.h>
+#include <string>
+#include <cwchar>
+#include <cstdlib>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+
+namespace {
+constexpr wchar_t kInternetSettingsKey[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+
+bool ReadRegistryString(const wchar_t* name, std::wstring* value) {
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, kInternetSettingsKey, 0, KEY_READ,
+                    &key) != ERROR_SUCCESS) {
+    return false;
+  }
+  wchar_t buffer[2048]{};
+  DWORD size = sizeof(buffer);
+  const auto result = RegQueryValueExW(key, name, nullptr, nullptr,
+                                       reinterpret_cast<LPBYTE>(buffer), &size);
+  RegCloseKey(key);
+  if (result != ERROR_SUCCESS) return false;
+  *value = buffer;
+  return true;
+}
+
+bool ReadRegistryDword(const wchar_t* name, DWORD* value) {
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, kInternetSettingsKey, 0, KEY_READ,
+                    &key) != ERROR_SUCCESS) {
+    return false;
+  }
+  DWORD size = sizeof(*value);
+  const auto result = RegQueryValueExW(key, name, nullptr, nullptr,
+                                       reinterpret_cast<LPBYTE>(value), &size);
+  RegCloseKey(key);
+  return result == ERROR_SUCCESS;
+}
+
+void DeleteRegistryValue(const wchar_t* name) {
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, kInternetSettingsKey, 0, KEY_SET_VALUE,
+                    &key) == ERROR_SUCCESS) {
+    RegDeleteValueW(key, name);
+    RegCloseKey(key);
+  }
+}
+
+void RestoreForgeProxySync() {
+  std::wstring marker;
+  if (!ReadRegistryString(L"ForgeVPNProxyOwned", &marker) || marker != L"1") {
+    return;
+  }
+  DWORD enabled = 0;
+  std::wstring server;
+  if (!ReadRegistryDword(L"ProxyEnable", &enabled) ||
+      !ReadRegistryString(L"ProxyServer", &server) || enabled != 1 ||
+      server != L"127.0.0.1:2080") {
+    return;
+  }
+
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, kInternetSettingsKey, 0, KEY_SET_VALUE,
+                    &key) != ERROR_SUCCESS) {
+    return;
+  }
+  const wchar_t* names[] = {L"ProxyEnable", L"ProxyServer", L"ProxyOverride"};
+  const wchar_t* backups[] = {L"ForgeVPNProxyBeforeEnable",
+                              L"ForgeVPNProxyBeforeServer",
+                              L"ForgeVPNProxyBeforeOverride"};
+  for (int i = 0; i < 3; ++i) {
+    std::wstring value;
+    if (ReadRegistryString(backups[i], &value)) {
+      if (i == 0) {
+        const DWORD previous = std::wcstoul(value.c_str(), nullptr, 10);
+        RegSetValueExW(key, names[i], 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&previous),
+                       sizeof(previous));
+      } else {
+        RegSetValueExW(key, names[i], 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(value.c_str()),
+                       static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+      }
+    } else {
+      RegDeleteValueW(key, names[i]);
+    }
+    RegDeleteValueW(key, backups[i]);
+  }
+  RegDeleteValueW(key, L"ForgeVPNProxyOwned");
+  RegCloseKey(key);
+}
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -64,6 +154,7 @@ void FlutterWindow::HideToTray() { ShowWindow(GetHandle(), SW_HIDE); }
 
 void FlutterWindow::ExitFromTray() {
   quitting_ = true;
+  RestoreForgeProxySync();
   RemoveTray();
   SetQuitOnClose(true);
   Destroy();

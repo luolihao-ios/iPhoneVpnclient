@@ -328,6 +328,10 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> _initDesktop(String suppliedPath) async {
+    // A previous process may have been terminated or the computer may have
+    // rebooted while Forge VPN owned the system proxy. Recover it before any
+    // new connection is started.
+    await _windowsProxy.recoverStaleSettings();
     final corePath = suppliedPath.isNotEmpty ? suppliedPath : _detectCorePath();
     if (corePath.isEmpty) {
       log('Warning: sing-box binary not found. Connection will fail.');
@@ -484,14 +488,14 @@ class AppProvider extends ChangeNotifier {
                       node: node,
                     ))
               .timeout(
-                const Duration(seconds: 10),
-                onTimeout: () => const health.HealthCheckResult(
-                  ok: false,
-                  healthStatus: 'unavailable',
-                  target: 'HTTPS',
-                  error: '节点检查超时',
-                ),
-              );
+            const Duration(seconds: 10),
+            onTimeout: () => const health.HealthCheckResult(
+              ok: false,
+              healthStatus: 'unavailable',
+              target: 'HTTPS',
+              error: '节点检查超时',
+            ),
+          );
         } catch (error) {
           result = health.HealthCheckResult(
             ok: false,
