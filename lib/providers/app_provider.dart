@@ -200,7 +200,13 @@ class AppProvider extends ChangeNotifier {
   Future<void> _loadAppVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      if (info.version.trim().isNotEmpty) _appVersion = info.version.trim();
+      final version = info.version.trim();
+      if (version.isNotEmpty) {
+        final build = int.tryParse(info.buildNumber.trim());
+        _appVersion = build == null
+            ? version
+            : '$version.${build.toString().padLeft(3, '0')}';
+      }
     } catch (_) {
       // Keep the compile-time fallback for tests and unsupported platforms.
     }
