@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:forge_vpn_flutter/providers/app_provider.dart';
 import 'package:forge_vpn_flutter/screens/dashboard_screen.dart';
 import 'package:forge_vpn_flutter/widgets/responsive.dart';
+import 'package:forge_vpn_flutter/l10n/app_localizations.dart';
 
 void main() {
   testWidgets('phone screen content has the additional top spacing',
@@ -45,7 +46,11 @@ void main() {
         data: const MediaQueryData(size: Size(360, 800)),
         child: ChangeNotifierProvider.value(
           value: provider,
-          child: const MaterialApp(home: DashboardScreen()),
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: DashboardScreen(),
+          ),
         ),
       ),
     );

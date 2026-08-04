@@ -201,6 +201,13 @@ List<VpnNode> _parseJsonSubscription(String text) {
     if (!hasNodes) throw SubscriptionError(msg.toString());
   }
 
+  // Some providers return one node as a JSON object instead of wrapping it in
+  // a `nodes`/`proxies` list. Treat that object as a single subscription node.
+  if (map['type'] != null || map['protocol'] != null) {
+    final node = _normalizeJsonNode(map);
+    if (node != null) return [node];
+  }
+
   for (final key in ['vmess', 'shadowsocks', 'anytls', 'wireguard']) {
     if (map[key] is List) {
       return (map[key] as List)

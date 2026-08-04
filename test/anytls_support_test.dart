@@ -20,7 +20,8 @@ class _RetryingSubscriptionClient extends http.BaseClient {
       );
     }
     return http.StreamedResponse(
-      Stream<List<int>>.value(utf8.encode('anytls://secret@example.com:443#AnyTLS')),
+      Stream<List<int>>.value(
+          utf8.encode('anytls://secret@example.com:443#AnyTLS')),
       200,
       request: request,
     );
@@ -31,7 +32,8 @@ void main() {
   test('resolves a pasted Stash install link to its HTTPS subscription', () {
     final encoded = Uri.encodeComponent('https://example.com/temporary-config');
     expect(
-      resolveSubscriptionInput('stash://install-config?url=$encoded&name=AnyTLS'),
+      resolveSubscriptionInput(
+          'stash://install-config?url=$encoded&name=AnyTLS'),
       'https://example.com/temporary-config',
     );
   });
@@ -69,7 +71,8 @@ void main() {
     expect((outbound['tls'] as Map)['server_name'], 'cdn.example.com');
   });
 
-  test('retries a forbidden subscription request with the FlClash user agent', () async {
+  test('retries a forbidden subscription request with the FlClash user agent',
+      () async {
     final client = _RetryingSubscriptionClient();
 
     final nodes = await fetchSubscription(
@@ -224,15 +227,22 @@ proxies:
     expect(
       routeRules,
       containsAll([
-        {'rule_set': ['geosite-cn'], 'outbound': 'direct'},
-        {'rule_set': ['geoip-cn'], 'outbound': 'direct'},
+        {
+          'rule_set': ['geosite-cn'],
+          'outbound': 'direct'
+        },
+        {
+          'rule_set': ['geoip-cn'],
+          'outbound': 'direct'
+        },
       ]),
     );
     expect(
       routeRules.where((rule) => rule.containsKey('domain_suffix')),
       contains(
         predicate<Map>((rule) {
-          final domains = (rule['domain_suffix'] as List?)?.cast<String>() ?? const [];
+          final domains =
+              (rule['domain_suffix'] as List?)?.cast<String>() ?? const [];
           return rule['outbound'] == 'proxy' &&
               domains.contains('app-analytics-services.com') &&
               domains.contains('googleapis.com');
@@ -244,7 +254,15 @@ proxies:
     expect(dns['final'], 'local');
     expect(
       (dns['rules'] as List).cast<Map>(),
-      contains({'rule_set': ['geosite-cn'], 'server': 'local'}),
+      contains(
+        predicate<Map>((rule) {
+          return rule['rule_set'] is List &&
+              (rule['rule_set'] as List)
+                  .cast<String>()
+                  .contains('geosite-cn') &&
+              rule['server'] == 'local';
+        }),
+      ),
     );
   });
 

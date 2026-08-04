@@ -9,11 +9,11 @@ void main() {
     expect(
       workflow,
       contains(
-          'plutil -extract Entitlements xml1 -o "$APP_ENTITLEMENTS_PATH" -'),
+          r'plutil -extract Entitlements xml1 -o "$APP_ENTITLEMENTS_PATH" -'),
     );
     expect(
       workflow,
-      contains('--entitlements "$APP_ENTITLEMENTS_PATH" "$APP_PATH"'),
+      contains(r'--entitlements "$APP_ENTITLEMENTS_PATH" "$APP_PATH"'),
     );
     expect(
       workflow,
