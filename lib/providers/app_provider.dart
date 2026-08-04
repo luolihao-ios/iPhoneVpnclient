@@ -737,7 +737,11 @@ class AppProvider extends ChangeNotifier {
   void dispose() {
     _statsTimer?.cancel();
     _controller?.dispose();
-    unawaited(_restoreWindowsProxy());
+    if (Platform.isWindows) {
+      _windowsProxy.restoreSync();
+    } else {
+      unawaited(_restoreWindowsProxy());
+    }
     _androidVpn?.disconnect();
     _iosVpn?.disconnect();
     super.dispose();
