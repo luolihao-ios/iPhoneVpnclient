@@ -876,3 +876,4 @@ UI 保持自适应布局：手机/平板/桌面仍按屏幕尺寸切换导航和
 - Flutter 在 iOS 连接前记录选中 AnyTLS 节点的脱敏摘要，便于和 Packet Tunnel 日志逐项比对。
 - iOS 与 Android 共用的 Flutter 外层内容增加顶部间距，并由 `SafeArea` 保护系统状态栏区域，首页及设置、日志等页面整体下移一个框的高度，避免内容贴近系统顶部区域。
 - Flutter 测试与 iOS 真机构建由开发者在本机或 GitHub Actions 执行；本轮只提交源码和回归测试，不把本地超时视为通过。
+- 手动运行 iOS GitHub Actions 时会创建带 IPA 附件的 GitHub Release；当前为 Ad Hoc 包，仅支持已注册 UDID 的设备，不能直接导入 TestFlight，越狱设备可按侧载工具支持安装。

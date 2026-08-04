@@ -8,6 +8,9 @@ on:
       - '.gitignore'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   # Keep the iOS core aligned with Android so new protocols (including AnyTLS)
   # use the same libbox implementation on both platforms.
@@ -420,3 +423,18 @@ jobs:
           name: ios-build-inspection.txt
           path: ios-build-inspection.txt
           retention-days: 7
+
+      - name: Publish IPA GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-test-${{ github.run_number }}
+          name: Forge VPN iOS 测试包 ${{ github.run_number }}
+          body: |
+            ## 安装说明
+
+            - 本 IPA 为 Ad Hoc 签名包，仅支持已注册 UDID 的 iPhone/iPad 真机安装。
+            - 本文件不能直接导入 TestFlight；TestFlight 需要另行上传 App Store Connect。
+            - 越狱设备可使用相应侧载工具安装，具体取决于设备和工具支持。
+            - 建议优先通过爱思助手或其他支持 Ad Hoc 的工具安装。
+          files: forge-vpn-ios-real-vpn.ipa

@@ -65,6 +65,14 @@
 
   `186c568daae18365f5eaf4780a1f79b375b929cb177b13bbe461097fbc156dc6`
 
+### iOS IPA 发布与安装说明
+
+- GitHub Actions 的 iOS 构建会生成 `forge-vpn-ios-real-vpn.ipa`。
+- 手动运行 GitHub Actions 时会同时创建 GitHub Release，并将 IPA 作为 Release 附件。
+- 当前 IPA 使用 Ad Hoc 描述文件，仅支持已注册 UDID 的 iPhone/iPad 真机。
+- Ad Hoc IPA 不能直接导入 TestFlight；TestFlight 版本必须通过 App Store Connect 单独上传。
+- 越狱设备可使用相应侧载工具安装，实际可用性取决于设备和工具。
+
 ## 验证记录
 
 已通过：
