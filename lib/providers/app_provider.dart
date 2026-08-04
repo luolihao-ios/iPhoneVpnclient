@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../core/models/node.dart';
 import '../core/node_health.dart' as health;
 import '../core/node_latency.dart';
@@ -117,6 +118,7 @@ class AppProvider extends ChangeNotifier {
   int _subscriptionRevision = 0;
   bool _isSwitching = false;
   WindowsUpdateInfo? _availableUpdate;
+  String _appVersion = currentWindowsVersion;
 
   /// Platform detection.
   static bool get _isAndroid =>
@@ -164,6 +166,7 @@ class AppProvider extends ChangeNotifier {
   String get subscriptionUrl => _subscriptionUrl;
   bool get isSwitching => _isSwitching;
   WindowsUpdateInfo? get availableUpdate => _availableUpdate;
+  String get appVersion => _appVersion;
 
   VpnNode? get selectedNode {
     if (nodes.isEmpty) return null;
@@ -175,6 +178,7 @@ class AppProvider extends ChangeNotifier {
 
   /// Initialize the controller (platform-appropriate).
   Future<void> initialize(String corePath) async {
+    await _loadAppVersion();
     if (_isiOS) {
       await _initIOS();
     } else if (_isAndroid) {
@@ -193,8 +197,17 @@ class AppProvider extends ChangeNotifier {
     unawaited(checkForUpdates());
   }
 
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.trim().isNotEmpty) _appVersion = info.version.trim();
+    } catch (_) {
+      // Keep the compile-time fallback for tests and unsupported platforms.
+    }
+  }
+
   Future<void> checkForUpdates() async {
-    final update = await fetchWindowsUpdate();
+    final update = await fetchWindowsUpdate(currentVersion: _appVersion);
     if (update == null) return;
     _availableUpdate = update;
     notifyListeners();

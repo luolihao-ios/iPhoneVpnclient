@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../widgets/responsive.dart';
 import '../l10n/app_localizations.dart';
-import '../core/update_checker.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -78,7 +77,7 @@ class SettingsScreen extends StatelessWidget {
                   _SettingRow(
                     icon: Icons.info_outline,
                     title: l10n.version,
-                    trailing: const Text(currentWindowsVersion,
+                    trailing: Text(provider.appVersion,
                         style: TextStyle(color: Color(0xFF657083))),
                   ),
                   const Divider(color: Color(0xFFD7DEE8), height: 1),
