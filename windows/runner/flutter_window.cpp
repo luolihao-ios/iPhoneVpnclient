@@ -113,6 +113,8 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project)
 FlutterWindow::~FlutterWindow() {}
 
 bool FlutterWindow::OnCreate() {
+  // Clear stale Forge VPN proxy ownership left by an interrupted shutdown or reboot.
+  RestoreForgeProxySync();
   if (!Win32Window::OnCreate()) return false;
 
   RECT frame = GetClientArea();
