@@ -470,7 +470,7 @@ class _TableNodeList extends StatelessWidget {
         _col(l10n.nodes, width: 220),
         _col(l10n.protocol, width: 140),
         _col(l10n.endpoint, flex: 1),
-        _col(l10n.ping, width: 90),
+        _col(l10n.ping, width: 120),
         _col(l10n.yes, width: 104),
         _col(l10n.status, width: 102),
       ],
@@ -566,7 +566,7 @@ class _TableNodeList extends StatelessWidget {
             ),
             // Ping
             SizedBox(
-              width: 90,
+              width: 120,
               child: Text(
                 _latencyText(node),
                 style: TextStyle(
