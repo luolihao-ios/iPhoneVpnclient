@@ -855,7 +855,8 @@ UI 保持自适应布局：手机/平板/桌面仍按屏幕尺寸切换导航和
 - 安装包包含 Flutter Release 文件、`sing-box.exe` 和 `data` 目录，支持开始菜单、桌面快捷方式及卸载。
 - Release 输出目录为 `dist/`，已加入 `.gitignore`。
 - GitHub 仓库：`https://github.com/luolihao-ios/iPhoneVpnclient`。
-- Windows Release：`v0.1.1-windows`，安装包为 `ForgeVPN-Setup-0.1.1.exe`；旧版 `v0.1.0-windows` 保留下载。
+- Windows Release：`v0.1.1-windows`，同一页面同时提供 `ForgeVPN-Setup-0.1.0.exe` 和 `ForgeVPN-Setup-0.1.1.exe`；旧版安装包继续保留下载。
+- GitHub 自动显示的 `Source code (zip)`、`Source code (tar.gz)` 链接无法从单个 Release 中隐藏，未额外上传源码压缩包。
 
 #### 本轮验证
 

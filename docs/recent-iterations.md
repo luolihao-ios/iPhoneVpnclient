@@ -59,9 +59,9 @@
 ## GitHub 发布
 
 - 当前仓库已迁移到：<https://github.com/luolihao-ios/iPhoneVpnclient>
-- Windows Release 页面：<https://github.com/luolihao-ios/iPhoneVpnclient/releases/tag/v0.1.0-windows>
-- 当前 Windows 安装包：`ForgeVPN-Setup-0.1.1.exe`
-- Windows Release：<https://github.com/luolihao-ios/iPhoneVpnclient/releases/tag/v0.1.1-windows>
+- Windows Release 页面：<https://github.com/luolihao-ios/iPhoneVpnclient/releases/tag/v0.1.1-windows>
+- 同一个 Windows Release 同时提供 `ForgeVPN-Setup-0.1.0.exe` 和 `ForgeVPN-Setup-0.1.1.exe`，旧版本继续保留下载。
+- GitHub 自动显示的 `Source code (zip)`、`Source code (tar.gz)` 链接由平台生成，无法从单个 Release 中隐藏；项目没有额外上传源码压缩包。
 - 安装包 SHA-256：
 
   `ED873F3BFD8381AD01FF3A46F9AADA2C152035F2A77605323B8A03F706A41E46`
