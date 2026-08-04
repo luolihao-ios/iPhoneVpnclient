@@ -4,7 +4,7 @@ $workspace = Split-Path -Parent $PSScriptRoot
 $releaseDir = Join-Path $workspace 'build\windows\x64\runner\Release'
 $iss = Join-Path $workspace 'installer\forge-vpn.iss'
 $pubspec = Join-Path $workspace 'pubspec.yaml'
-$singBoxVersion = '1.13.14'
+$singBoxVersion = '1.13.16'
 $versionLine = Get-Content -LiteralPath $pubspec | Where-Object { $_ -match '^version:\s*([^+\s]+)' } | Select-Object -First 1
 if (-not $versionLine -or $versionLine -notmatch '^version:\s*([^+\s]+)') {
   throw "Unable to read app version from $pubspec"
@@ -31,14 +31,14 @@ try {
   }
   $singBoxPath = Join-Path $releaseDir 'sing-box.exe'
   if (-not (Test-Path $singBoxPath)) {
-    $archive = Join-Path $env:TEMP "sing-box-$singBoxVersion-windows-amd64.tar.gz"
+    $archive = Join-Path $env:TEMP "sing-box-$singBoxVersion-windows-amd64.zip"
     $extractDir = Join-Path $env:TEMP "sing-box-$singBoxVersion-windows-amd64"
-    $url = "https://github.com/SagerNet/sing-box/releases/download/v$singBoxVersion/sing-box-$singBoxVersion-windows-amd64.tar.gz"
+    $url = "https://github.com/SagerNet/sing-box/releases/download/v$singBoxVersion/sing-box-$singBoxVersion-windows-amd64.zip"
     Write-Host "Downloading sing-box v$singBoxVersion for Windows x64..."
     Invoke-WebRequest -Uri $url -OutFile $archive
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
     New-Item -ItemType Directory -Path $extractDir | Out-Null
-    tar -xzf $archive -C $extractDir
+    Expand-Archive -LiteralPath $archive -DestinationPath $extractDir -Force
     $downloadedCore = Get-ChildItem $extractDir -Filter 'sing-box.exe' -Recurse | Select-Object -First 1
     if (-not $downloadedCore) {
       throw "Downloaded sing-box archive does not contain sing-box.exe"
