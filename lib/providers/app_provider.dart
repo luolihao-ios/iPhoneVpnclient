@@ -186,7 +186,7 @@ class AppProvider extends ChangeNotifier {
     // Restore saved subscription URL
     await _restoreSubscription();
     if (_nodes.isNotEmpty) {
-      unawaited(checkAllNodes().catchError((error, stackTrace) {
+      unawaited(checkAllNodes().catchError((error) {
         log('Startup node health check failed: $error');
       }));
     }
@@ -530,7 +530,7 @@ class AppProvider extends ChangeNotifier {
             'Node health check batch timed out after 30 seconds');
       }
       return;
-    } catch (error, stackTrace) {
+    } catch (error) {
       log('Node health check batch failed: $error');
       markRemainingUnavailable('Node health check batch stopped unexpectedly');
     }
