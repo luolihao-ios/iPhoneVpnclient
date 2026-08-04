@@ -56,3 +56,4 @@ golib/ios/go.sum
 
 # Download archives are only used to extract the tracked runtime binaries.
 /assets/binaries/*.tar.gz
+/tools/sing-box/*.exe
