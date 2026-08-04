@@ -60,10 +60,11 @@
 
 - 当前仓库已迁移到：<https://github.com/luolihao-ios/iPhoneVpnclient>
 - Windows Release 页面：<https://github.com/luolihao-ios/iPhoneVpnclient/releases/tag/v0.1.0-windows>
-- 当前安装包：`ForgeVPN-Setup-0.1.0.exe`
+- 当前 Windows 安装包：`ForgeVPN-Setup-0.1.1.exe`
+- Windows Release：<https://github.com/luolihao-ios/iPhoneVpnclient/releases/tag/v0.1.1-windows>
 - 安装包 SHA-256：
 
-  `186c568daae18365f5eaf4780a1f79b375b929cb177b13bbe461097fbc156dc6`
+  `ED873F3BFD8381AD01FF3A46F9AADA2C152035F2A77605323B8A03F706A41E46`
 
 ### iOS IPA 发布与安装说明
 
