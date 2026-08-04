@@ -49,7 +49,7 @@ void main() {
           child: const MaterialApp(
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
-            home: DashboardScreen(),
+            home: const Scaffold(body: DashboardScreen()),
           ),
         ),
       ),
