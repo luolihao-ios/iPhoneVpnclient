@@ -61,6 +61,22 @@ void NotifyProxySettingsChanged() {
 void RestoreForgeProxySync() {
   std::wstring marker;
   if (!ReadRegistryString(L"ForgeVPNProxyOwned", &marker) || marker != L"1") {
+    DWORD enabled = 0;
+    std::wstring server;
+    if (ReadRegistryDword(L"ProxyEnable", &enabled) &&
+        ReadRegistryString(L"ProxyServer", &server) && enabled == 1 &&
+        server == L"127.0.0.1:2080") {
+      HKEY key = nullptr;
+      if (RegOpenKeyExW(HKEY_CURRENT_USER, kInternetSettingsKey, 0,
+                        KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+        const DWORD disabled = 0;
+        RegSetValueExW(key, L"ProxyEnable", 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&disabled),
+                       sizeof(disabled));
+        RegDeleteValueW(key, L"ProxyServer");
+        RegCloseKey(key);
+      }
+    }
     NotifyProxySettingsChanged();
     return;
   }

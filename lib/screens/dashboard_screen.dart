@@ -538,18 +538,20 @@ class _TableNodeList extends StatelessWidget {
             // Protocol pill
             SizedBox(
               width: 108,
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 72),
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF5D8CFF).withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  node.type.localizedLabel(l10n),
-                  style:
-                      const TextStyle(fontSize: 12, color: Color(0xFF28416E)),
-                  textAlign: TextAlign.center,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 72),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1478E8).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    node.type.localizedLabel(l10n),
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF28416E)),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ),
