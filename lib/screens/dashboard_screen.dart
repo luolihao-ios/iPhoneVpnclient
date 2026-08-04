@@ -467,8 +467,8 @@ class _TableNodeList extends StatelessWidget {
   Widget _buildHeader(AppLocalizations l10n) {
     return Row(
       children: [
-        _col(l10n.nodes, width: 280),
-        _col(l10n.protocol, width: 120),
+        _col(l10n.nodes, width: 220),
+        _col(l10n.protocol, width: 108),
         _col(l10n.endpoint, flex: 1),
         _col(l10n.ping, width: 90),
         _col(l10n.yes, width: 104),
@@ -527,7 +527,7 @@ class _TableNodeList extends StatelessWidget {
           children: [
             // Node name
             SizedBox(
-              width: 280,
+              width: 220,
               child: Text(
                 node.name,
                 style: const TextStyle(
@@ -537,7 +537,7 @@ class _TableNodeList extends StatelessWidget {
             ),
             // Protocol pill
             SizedBox(
-              width: 120,
+              width: 108,
               child: Container(
                 constraints: const BoxConstraints(minWidth: 72),
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
