@@ -133,7 +133,7 @@ class _StatusCard extends StatelessWidget {
                   children: [
                     Text(
                       node?.name ?? l10n.noNodeSelected,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Responsive.textPrimary,
