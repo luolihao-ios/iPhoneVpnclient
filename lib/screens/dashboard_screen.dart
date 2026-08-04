@@ -468,7 +468,7 @@ class _TableNodeList extends StatelessWidget {
     return Row(
       children: [
         _col(l10n.nodes, width: 220),
-        _col(l10n.protocol, width: 108),
+        _col(l10n.protocol, width: 140),
         _col(l10n.endpoint, flex: 1),
         _col(l10n.ping, width: 90),
         _col(l10n.yes, width: 104),
@@ -537,7 +537,7 @@ class _TableNodeList extends StatelessWidget {
             ),
             // Protocol pill
             SizedBox(
-              width: 108,
+              width: 140,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
