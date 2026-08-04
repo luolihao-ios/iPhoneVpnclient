@@ -467,9 +467,9 @@ class _TableNodeList extends StatelessWidget {
   Widget _buildHeader(AppLocalizations l10n) {
     return Row(
       children: [
-        _col(l10n.nodes, flex: 14),
-        _col(l10n.protocol, width: 104),
-        _col(l10n.endpoint, flex: 12),
+        _col(l10n.nodes, width: 280),
+        _col(l10n.protocol, width: 120),
+        _col(l10n.endpoint, flex: 1),
         _col(l10n.ping, width: 90),
         _col(l10n.yes, width: 104),
         _col(l10n.status, width: 102),
@@ -526,8 +526,8 @@ class _TableNodeList extends StatelessWidget {
         child: Row(
           children: [
             // Node name
-            Expanded(
-              flex: 14,
+            SizedBox(
+              width: 280,
               child: Text(
                 node.name,
                 style: const TextStyle(
@@ -537,7 +537,7 @@ class _TableNodeList extends StatelessWidget {
             ),
             // Protocol pill
             SizedBox(
-              width: 104,
+              width: 120,
               child: Container(
                 constraints: const BoxConstraints(minWidth: 72),
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
@@ -555,7 +555,7 @@ class _TableNodeList extends StatelessWidget {
             ),
             // Endpoint
             Expanded(
-              flex: 12,
+              flex: 1,
               child: Text(
                 '${node.server}:${node.port}',
                 style: TextStyle(fontSize: 12, color: Color(0xFF657083)),
