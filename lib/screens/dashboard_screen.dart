@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../core/models/node.dart';
-import '../core/node_latency.dart';
 import '../core/node_grouping.dart';
 import '../core/region_localization.dart';
 import '../widgets/responsive.dart';
