@@ -62,7 +62,10 @@
 
 - 当前仓库已迁移到：<https://github.com/luolihao-ios/iPhoneVpnclient>
 - Windows Release 页面：<https://github.com/luolihao-ios/iPhoneVpnclient/releases/tag/v0.1.1-windows>
-- 同一个 Windows Release 同时提供 `ForgeVPN-Setup-0.1.0.exe` 和 `ForgeVPN-Setup-0.1.1.exe`，旧版本继续保留下载。
+- 同一个 Windows Release 同时提供 `ForgeVPN-Setup-0.1.0.exe`、`ForgeVPN-Setup-0.1.1.exe` 和 `ForgeVPN-Setup-0.1.2.exe`，旧版本继续保留下载。
+- 后续 Windows 发包统一上传到现有 Release `v0.1.1-windows`，不再为每个版本单独创建 Release；每次只新增对应版本的 `.exe` 安装包，保留历史安装包下载。
+- GitHub 自动生成的 `Source code (zip)` 和 `Source code (tar.gz)` 保持平台默认状态，不额外上传源码压缩包。
+- 发布步骤：递增 `pubspec.yaml` 的版本和构建号，运行 `scripts/build_windows_installer.ps1`，再执行 `gh release upload v0.1.1-windows dist/ForgeVPN-Setup-<版本>.exe`。
 - GitHub 自动显示的 `Source code (zip)`、`Source code (tar.gz)` 链接由平台生成，无法从单个 Release 中隐藏；项目没有额外上传源码压缩包。
 - 安装包 SHA-256：
 
