@@ -69,6 +69,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get checking => 'Checking';
 
   @override
+  String get stopChecking => 'Stop';
+
+  @override
   String availableCount(int count) {
     return '$count available';
   }

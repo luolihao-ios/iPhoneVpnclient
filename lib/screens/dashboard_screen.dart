@@ -63,10 +63,8 @@ class DashboardScreen extends StatelessWidget {
                     _err(context, e.toString());
                   }
                 },
-                onCheckAll: () async {
-                  if (rt.checkingNodes) return;
-                  await provider.checkAllNodes();
-                },
+                onCheckAll: provider.checkAllNodes,
+                onStopChecks: provider.stopNodeChecks,
               ),
             ],
           ),
@@ -270,6 +268,7 @@ class _ServerTable extends StatelessWidget {
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onDoubleTap;
   final VoidCallback onCheckAll;
+  final VoidCallback onStopChecks;
 
   const _ServerTable({
     required this.nodes,
@@ -280,6 +279,7 @@ class _ServerTable extends StatelessWidget {
     required this.onSelect,
     required this.onDoubleTap,
     required this.onCheckAll,
+    required this.onStopChecks,
   });
 
   @override
@@ -364,7 +364,9 @@ class _ServerTable extends StatelessWidget {
         SizedBox(
           height: 30,
           child: TextButton(
-            onPressed: checkingNodes || nodes.isEmpty ? null : onCheckAll,
+            onPressed: checkingNodes
+                ? onStopChecks
+                : (nodes.isEmpty ? null : onCheckAll),
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFF172033),
               backgroundColor: Colors.white,
@@ -374,7 +376,7 @@ class _ServerTable extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
             ),
             child: Text(
-              checkingNodes ? l10n.checking : l10n.check,
+              checkingNodes ? l10n.stopChecking : l10n.check,
               style: const TextStyle(fontSize: 12),
             ),
           ),

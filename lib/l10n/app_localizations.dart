@@ -218,6 +218,12 @@ abstract class AppLocalizations {
   /// **'Checking'**
   String get checking;
 
+  /// No description provided for @stopChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get stopChecking;
+
   /// No description provided for @availableCount.
   ///
   /// In en, this message translates to:

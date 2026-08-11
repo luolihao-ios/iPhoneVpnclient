@@ -20,6 +20,7 @@
   "subscriptionServers": "订阅服务器",
   "check": "检查",
   "checking": "检查中",
+  "stopChecking": "停止",
   "availableCount": "{count} 个可用",
   "@availableCount": {"placeholders": {"count": {"type": "int"}}},
   "totalCount": "共 {count} 个",

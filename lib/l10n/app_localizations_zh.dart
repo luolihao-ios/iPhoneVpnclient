@@ -69,6 +69,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get checking => '检查中';
 
   @override
+  String get stopChecking => '停止';
+
+  @override
   String availableCount(int count) {
     return '$count 个可用';
   }

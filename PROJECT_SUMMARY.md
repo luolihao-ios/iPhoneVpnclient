@@ -878,3 +878,26 @@ UI 保持自适应布局：手机/平板/桌面仍按屏幕尺寸切换导航和
 - iOS 与 Android 共用的 Flutter 外层内容增加顶部间距，并由 `SafeArea` 保护系统状态栏区域，首页及设置、日志等页面整体下移一个框的高度，避免内容贴近系统顶部区域。
 - Flutter 测试与 iOS 真机构建由开发者在本机或 GitHub Actions 执行；本轮只提交源码和回归测试，不把本地超时视为通过。
 - 手动运行 iOS GitHub Actions 时会创建带 IPA 附件的 GitHub Release；当前为 Ad Hoc 包，仅支持已注册 UDID 的设备，不能直接导入 TestFlight，越狱设备可按侧载工具支持安装。
+
+### 22. 大型订阅容错与自适应节点快速筛查（2026-08-11）
+
+#### 订阅导入稳定性
+
+- 订阅解析容忍未编码 Unicode、损坏的百分号编码及单条格式损坏节点；跳过坏条目而不阻断后续有效节点。
+- 支持 sing-box JSON 入站节点导入，并保留 AnyTLS 配置字段。
+- 临时网络错误（如连接重置、信号灯超时）会自动重试两次；HTTP 404 等明确响应不会盲目重试。
+- 开始导入新订阅前会先取消旧订阅的后台筛查，避免大型订阅检查占满连接资源、拖慢后续导入。
+
+#### 节点快速筛查与可停止检查
+
+- 首次导入及启动恢复后，先并发 TCP 预筛全部节点，再只对 TCP 可达候选进行真实 sing-box 验证。
+- 前 15 秒保留所有快速完成的可用结果；15 秒后若已确认至少 5 个可用节点则停止领取新验证任务；不足 5 个时继续筛查，最长 45 秒。
+- 小型或高质量订阅会在快速窗口内保留全部已完成结果，而不是机械地截断为 5 个节点。
+- 手动“检查”支持点击“停止”；停止后保留已完成结果，未完成节点恢复为未检查状态。
+- 取消检查会立即释放 TCP/真实验证的超时计时器；底层网络请求晚到的结果不会污染新一轮检查状态。
+
+#### 本轮验证
+
+- `flutter test test/dashboard_responsive_test.dart test/app_provider_screening_test.dart`：通过。
+- `flutter test test/initial_node_screening_test.dart test/node_latency_test.dart`：通过。
+- `flutter test test/subscription_retry_test.dart test/subscription_tolerance_test.dart test/anytls_support_test.dart`：通过。

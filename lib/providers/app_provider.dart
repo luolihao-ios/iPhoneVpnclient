@@ -149,6 +149,7 @@ class AppProvider extends ChangeNotifier {
   final bool _hasInjectedHealthCheckers;
   Timer? _statsTimer;
   int _latencyBatchId = 0;
+  Completer<void>? _nodeCheckCancellation;
   int _subscriptionRevision = 0;
   bool _isSwitching = false;
   WindowsUpdateInfo? _availableUpdate;
@@ -519,6 +520,11 @@ class AppProvider extends ChangeNotifier {
 
   void stopNodeChecks() {
     _latencyBatchId++;
+    final cancellation = _nodeCheckCancellation;
+    if (cancellation != null && !cancellation.isCompleted) {
+      cancellation.complete();
+    }
+    _nodeCheckCancellation = null;
     _nodes = _nodes
         .map((node) => node.healthStatus == HealthStatus.checking
             ? resetNodeHealth(node)
@@ -532,6 +538,12 @@ class AppProvider extends ChangeNotifier {
   Future<void> startInitialNodeScreening() async {
     if (_nodes.isEmpty || !_canCheckNodes) return;
 
+    final previousCancellation = _nodeCheckCancellation;
+    if (previousCancellation != null && !previousCancellation.isCompleted) {
+      previousCancellation.complete();
+    }
+    final cancellation = Completer<void>();
+    _nodeCheckCancellation = cancellation;
     final batchId = ++_latencyBatchId;
     _nodes = _nodes.map(resetNodeHealth).toList();
     final nodesToCheck = List<VpnNode>.from(_nodes);
@@ -559,9 +571,11 @@ class AppProvider extends ChangeNotifier {
       final summary = await runInitialNodeScreening(
         nodes: nodesToCheck,
         tcpProbe: (node) async {
-          final result = await _tcpChecker(node).timeout(
-            const Duration(milliseconds: 1200),
-            onTimeout: () => const health.HealthCheckResult(
+          final result = await _awaitNodeCheck(
+            _tcpChecker(node),
+            cancellation: cancellation.future,
+            timeout: const Duration(milliseconds: 1200),
+            onTimeout: const health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
               target: 'Node',
@@ -574,9 +588,11 @@ class AppProvider extends ChangeNotifier {
           final check = (_isAndroid || _isiOS)
               ? _tcpChecker(node)
               : _fullChecker(node, corePath, healthDir);
-          return check.timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => const health.HealthCheckResult(
+          return _awaitNodeCheck(
+            check,
+            cancellation: cancellation.future,
+            timeout: const Duration(seconds: 10),
+            onTimeout: const health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
               target: 'HTTPS',
@@ -630,6 +646,9 @@ class AppProvider extends ChangeNotifier {
         await _persistNodes();
         notifyListeners();
       }
+      if (identical(_nodeCheckCancellation, cancellation)) {
+        _nodeCheckCancellation = null;
+      }
     }
   }
 
@@ -637,6 +656,12 @@ class AppProvider extends ChangeNotifier {
   Future<void> checkAllNodes() async {
     if (nodes.isEmpty) return;
 
+    final previousCancellation = _nodeCheckCancellation;
+    if (previousCancellation != null && !previousCancellation.isCompleted) {
+      previousCancellation.complete();
+    }
+    final cancellation = Completer<void>();
+    _nodeCheckCancellation = cancellation;
     final batchId = ++_latencyBatchId;
     _nodes = prepareNodesForLatencyTest(_nodes);
     // Keep a stable order for this batch. The public `nodes` getter sorts by
@@ -661,12 +686,13 @@ class AppProvider extends ChangeNotifier {
 
         late health.HealthCheckResult result;
         try {
-          result = await ((_isAndroid || _isiOS)
-                  ? _tcpChecker(node)
-                  : _fullChecker(node, corePath, healthDir))
-              .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => const health.HealthCheckResult(
+          result = await _awaitNodeCheck(
+            (_isAndroid || _isiOS)
+                ? _tcpChecker(node)
+                : _fullChecker(node, corePath, healthDir),
+            cancellation: cancellation.future,
+            timeout: const Duration(seconds: 10),
+            onTimeout: const health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
               target: 'HTTPS',
@@ -718,6 +744,36 @@ class AppProvider extends ChangeNotifier {
       _runtime = _runtime.copyWith(checkingNodes: false);
       notifyListeners();
     }
+    if (identical(_nodeCheckCancellation, cancellation)) {
+      _nodeCheckCancellation = null;
+    }
+  }
+
+  Future<health.HealthCheckResult> _awaitNodeCheck(
+    Future<health.HealthCheckResult> check, {
+    required Future<void> cancellation,
+    required Duration timeout,
+    required health.HealthCheckResult onTimeout,
+  }) {
+    final result = Completer<health.HealthCheckResult>();
+    Timer? timer;
+
+    void complete(health.HealthCheckResult value) {
+      if (result.isCompleted) return;
+      timer?.cancel();
+      result.complete(value);
+    }
+
+    void completeError(Object error, StackTrace stackTrace) {
+      if (result.isCompleted) return;
+      timer?.cancel();
+      result.completeError(error, stackTrace);
+    }
+
+    timer = Timer(timeout, () => complete(onTimeout));
+    unawaited(cancellation.then((_) => complete(onTimeout)));
+    unawaited(check.then(complete, onError: completeError));
+    return result.future;
   }
 
   /// Connect to the selected node.

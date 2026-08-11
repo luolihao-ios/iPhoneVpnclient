@@ -20,6 +20,7 @@
   "subscriptionServers": "Subscription servers",
   "check": "Check",
   "checking": "Checking",
+  "stopChecking": "Stop",
   "availableCount": "{count} available",
   "@availableCount": {"placeholders": {"count": {"type": "int"}}},
   "totalCount": "{count} total",
