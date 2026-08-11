@@ -51,7 +51,7 @@ void main() {
 
     expect(response, startsWith('HTTP/1.1 204'));
     expect(
-      await requestSeen,
+      await requestSeen.future,
       contains(
         'GET http://www.gstatic.com/generate_204 HTTP/1.1\r\n'
         'Host: www.gstatic.com',

@@ -67,15 +67,14 @@ Future<HealthCheckResult> checkNodeTcpAvailability({
   );
 }
 
-/// Check a desktop node by establishing a real HTTP proxy tunnel through it.
+/// Check a desktop node by requesting a real HTTP 204 response through it.
 Future<HealthCheckResult> checkNodeAvailability({
   required String corePath,
   required String runtimeDir,
   required VpnNode node,
   int timeoutMs = 3000,
-  String targetHost = 'www.youtube.com',
-  int targetPort = 443,
-  String targetLabel = 'YouTube',
+  String targetUrl = 'http://www.gstatic.com/generate_204',
+  String targetLabel = 'HTTP 204',
 }) async {
   Process? child;
   String? configPath;
@@ -112,14 +111,13 @@ Future<HealthCheckResult> checkNodeAvailability({
     child.stderr.drain();
 
     await _waitForLocalPort(httpPort, min(1200, remainingMs()));
-    final response = await _probeHttpConnect(
+    final response = await requestHttp204ThroughProxy(
       proxyPort: httpPort,
-      targetHost: targetHost,
-      targetPort: targetPort,
+      target: Uri.parse(targetUrl),
       timeoutMs: remainingMs(),
     );
-    if (!isHttpProxyConnectEstablished(response)) {
-      throw Exception('proxy CONNECT failed: ${response.trim()}');
+    if (!isHttp204Response(response)) {
+      throw Exception('unexpected health response: ${response.trim()}');
     }
 
     return HealthCheckResult(
@@ -147,30 +145,33 @@ Future<HealthCheckResult> checkNodeAvailability({
   }
 }
 
-/// Whether an HTTP proxy confirmed that it established the requested tunnel.
-bool isHttpProxyConnectEstablished(String response) {
-  return RegExp(r'^HTTP/1\.[01] 200\b', caseSensitive: false)
-      .hasMatch(response.trimLeft());
+/// Whether the target returned the exact no-content response used for probing.
+bool isHttp204Response(String statusLine) {
+  return RegExp(r'^HTTP/1\.[01] 204\b', caseSensitive: false)
+      .hasMatch(statusLine.trimLeft());
 }
 
-Future<String> _probeHttpConnect({
+Future<String> requestHttp204ThroughProxy({
   required int proxyPort,
-  required String targetHost,
-  required int targetPort,
+  required Uri target,
   required int timeoutMs,
 }) async {
   if (timeoutMs <= 0) throw TimeoutException('node check timed out');
+  final stopwatch = Stopwatch()..start();
   Socket? socket;
   try {
     socket = await Socket.connect(
-      '127.0.0.1',
+      InternetAddress.loopbackIPv4,
       proxyPort,
       timeout: Duration(milliseconds: timeoutMs),
     );
+    final remaining = timeoutMs - stopwatch.elapsedMilliseconds;
+    if (remaining <= 0) throw TimeoutException('node check timed out');
     socket.write(
-      'CONNECT $targetHost:$targetPort HTTP/1.1\r\n'
-      'Host: $targetHost:$targetPort\r\n'
-      'Proxy-Connection: close\r\n\r\n',
+      'GET $target HTTP/1.1\r\n'
+      'Host: ${target.host}\r\n'
+      'Connection: close\r\n'
+      'User-Agent: ForgeVPN-HealthCheck\r\n\r\n',
     );
     await socket.flush();
     return await utf8
@@ -178,7 +179,7 @@ Future<String> _probeHttpConnect({
         .bind(socket)
         .transform(const LineSplitter())
         .first
-        .timeout(Duration(milliseconds: timeoutMs));
+        .timeout(Duration(milliseconds: remaining));
   } finally {
     socket?.destroy();
   }
