@@ -4,9 +4,6 @@ import 'node_health.dart';
 typedef NodeTcpProbe = Future<int?> Function(VpnNode node);
 typedef NodeValidator = Future<HealthCheckResult> Function(VpnNode node);
 
-const initialScreeningQuickWindow = Duration(seconds: 15);
-const initialScreeningOverallLimit = Duration(seconds: 45);
-const initialScreeningMinimumAvailable = 5;
 const initialScreeningTcpConcurrency = 48;
 const initialScreeningValidationConcurrency = 3;
 
@@ -16,18 +13,14 @@ class InitialScreeningSummary {
     required this.validatedCount,
     required this.availableCount,
     required this.cancelled,
-    required this.timedOut,
     required this.exhaustedCandidates,
-    required this.reachedMinimumAfterQuickWindow,
   });
 
   final int tcpCheckedCount;
   final int validatedCount;
   final int availableCount;
   final bool cancelled;
-  final bool timedOut;
   final bool exhaustedCandidates;
-  final bool reachedMinimumAfterQuickWindow;
 }
 
 class _TcpCandidate {
@@ -45,26 +38,14 @@ Future<InitialScreeningSummary> runInitialNodeScreening({
   required void Function(VpnNode node, int latency) onTcpReachable,
   required void Function(VpnNode node, HealthCheckResult result) onNodeResult,
   required bool Function() isCancelled,
-  DateTime Function()? now,
-  Duration quickWindow = initialScreeningQuickWindow,
-  Duration overallLimit = initialScreeningOverallLimit,
-  int minimumAvailable = initialScreeningMinimumAvailable,
   int tcpConcurrency = initialScreeningTcpConcurrency,
   int validationConcurrency = initialScreeningValidationConcurrency,
 }) async {
-  final currentTime = now ?? DateTime.now;
-  final startedAt = currentTime();
   final candidates = <_TcpCandidate>[];
   var tcpCursor = 0;
   var tcpCheckedCount = 0;
   var validatedCount = 0;
   var availableCount = 0;
-  var timedOut = false;
-  var reachedMinimumAfterQuickWindow = false;
-
-  bool reachedOverallLimit() {
-    return currentTime().difference(startedAt) >= overallLimit;
-  }
 
   final effectiveTcpConcurrency = tcpConcurrency < 1 ? 1 : tcpConcurrency;
   final tcpWorkers = List.generate(
@@ -73,10 +54,6 @@ Future<InitialScreeningSummary> runInitialNodeScreening({
         : effectiveTcpConcurrency,
     (_) async {
       while (tcpCursor < nodes.length && !isCancelled()) {
-        if (reachedOverallLimit()) {
-          timedOut = true;
-          return;
-        }
         final node = nodes[tcpCursor++];
         int? latency;
         try {
@@ -116,16 +93,6 @@ Future<InitialScreeningSummary> runInitialNodeScreening({
         : effectiveValidationConcurrency,
     (_) async {
       while (validationCursor < candidates.length && !isCancelled()) {
-        final elapsed = currentTime().difference(startedAt);
-        if (elapsed >= overallLimit) {
-          timedOut = true;
-          return;
-        }
-        if (elapsed >= quickWindow && availableCount >= minimumAvailable) {
-          reachedMinimumAfterQuickWindow = true;
-          return;
-        }
-
         final candidate = candidates[validationCursor++];
         final node = candidate.node;
         onNodeChecking(node);
@@ -158,9 +125,7 @@ Future<InitialScreeningSummary> runInitialNodeScreening({
     validatedCount: validatedCount,
     availableCount: availableCount,
     cancelled: isCancelled(),
-    timedOut: timedOut,
     exhaustedCandidates:
-        !isCancelled() && !timedOut && validationCursor >= candidates.length,
-    reachedMinimumAfterQuickWindow: reachedMinimumAfterQuickWindow,
+        !isCancelled() && validationCursor >= candidates.length,
   );
 }

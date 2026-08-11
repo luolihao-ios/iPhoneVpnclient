@@ -591,7 +591,7 @@ class AppProvider extends ChangeNotifier {
           return _awaitNodeCheck(
             check,
             cancellation: cancellation.future,
-            timeout: const Duration(seconds: 10),
+            timeout: const Duration(seconds: 3),
             onTimeout: const health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
@@ -627,7 +627,7 @@ class AppProvider extends ChangeNotifier {
         log(
           'Initial node screening finished: tcp=${summary.tcpCheckedCount} '
           'validated=${summary.validatedCount} available=${summary.availableCount} '
-          'timedOut=${summary.timedOut}',
+          'exhausted=${summary.exhaustedCandidates}',
         );
       }
     } catch (error) {
@@ -691,7 +691,7 @@ class AppProvider extends ChangeNotifier {
                 ? _tcpChecker(node)
                 : _fullChecker(node, corePath, healthDir),
             cancellation: cancellation.future,
-            timeout: const Duration(seconds: 10),
+            timeout: const Duration(seconds: 3),
             onTimeout: const health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',

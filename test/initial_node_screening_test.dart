@@ -73,9 +73,6 @@ void main() {
 
     final summary = await runInitialNodeScreening(
       nodes: nodes,
-      now: clock.now,
-      quickWindow: const Duration(seconds: 15),
-      overallLimit: const Duration(seconds: 45),
       validationConcurrency: 1,
       tcpProbe: (_) async => 10,
       validate: (_) async {
@@ -88,9 +85,8 @@ void main() {
       isCancelled: () => false,
     );
 
-    expect(summary.availableCount, 8);
-    expect(summary.validatedCount, 8);
-    expect(summary.reachedMinimumAfterQuickWindow, isTrue);
+    expect(summary.availableCount, 12);
+    expect(summary.validatedCount, 12);
   });
 
   test('15 秒后不足 5 个会继续检查直到获得 5 个', () async {
@@ -100,9 +96,6 @@ void main() {
 
     final summary = await runInitialNodeScreening(
       nodes: nodes,
-      now: clock.now,
-      quickWindow: const Duration(seconds: 15),
-      overallLimit: const Duration(seconds: 45),
       validationConcurrency: 1,
       tcpProbe: (_) async => 10,
       validate: (_) async {
@@ -116,24 +109,17 @@ void main() {
       isCancelled: () => false,
     );
 
-    expect(summary.availableCount, 5);
-    expect(summary.validatedCount, 9);
-    expect(summary.timedOut, isFalse);
+    expect(summary.availableCount, 8);
+    expect(summary.validatedCount, 12);
   });
 
   test('小型优质订阅在快速窗口内保留全部结果', () async {
     final nodes = List.generate(4, _node);
-    final clock = _FakeClock();
-
     final summary = await runInitialNodeScreening(
       nodes: nodes,
-      now: clock.now,
       validationConcurrency: 1,
       tcpProbe: (_) async => 10,
-      validate: (_) async {
-        clock.advance(const Duration(seconds: 2));
-        return _available;
-      },
+      validate: (_) async => _available,
       onNodeChecking: (_) {},
       onTcpReachable: (_, __) {},
       onNodeResult: (_, __) {},
@@ -151,9 +137,6 @@ void main() {
 
     final summary = await runInitialNodeScreening(
       nodes: nodes,
-      now: clock.now,
-      quickWindow: const Duration(seconds: 15),
-      overallLimit: const Duration(seconds: 45),
       validationConcurrency: 1,
       tcpProbe: (_) async => 10,
       validate: (_) async {
@@ -166,8 +149,8 @@ void main() {
       isCancelled: () => false,
     );
 
-    expect(summary.validatedCount, 5);
-    expect(summary.timedOut, isTrue);
+    expect(summary.validatedCount, 20);
+    expect(summary.exhaustedCandidates, isTrue);
   });
 
   test('取消后停止领取新的真实验证任务', () async {
@@ -191,5 +174,31 @@ void main() {
 
     expect(summary.cancelled, isTrue);
     expect(summary.validatedCount, 1);
+  });
+
+  test('可用节点数量和经过时间不会提前结束全节点检查', () async {
+    final nodes = List.generate(8, _node);
+    final clock = _FakeClock();
+    final validated = <String>[];
+
+    final summary = await runInitialNodeScreening(
+      nodes: nodes,
+      validationConcurrency: 1,
+      tcpProbe: (_) async => 10,
+      validate: (node) async {
+        validated.add(node.id);
+        clock.advance(const Duration(seconds: 4));
+        return _available;
+      },
+      onNodeChecking: (_) {},
+      onTcpReachable: (_, __) {},
+      onNodeResult: (_, __) {},
+      isCancelled: () => false,
+    );
+
+    expect(validated, nodes.map((node) => node.id));
+    expect(summary.validatedCount, nodes.length);
+    expect(summary.availableCount, nodes.length);
+    expect(summary.exhaustedCandidates, isTrue);
   });
 }

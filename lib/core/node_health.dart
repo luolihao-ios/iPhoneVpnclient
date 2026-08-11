@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+
 import 'models/node.dart';
 import 'singbox_config.dart';
 
@@ -25,9 +27,6 @@ class HealthCheckResult {
 Future<int?> tcpPing(String host, int port, {int timeoutMs = 3000}) async {
   final stopwatch = Stopwatch()..start();
   try {
-    // Android emulators often advertise IPv6 DNS answers without a working
-    // IPv6 route. Prefer IPv4 so a healthy endpoint is not reported as down
-    // before libbox gets a chance to establish the real protocol connection.
     final addresses = await InternetAddress.lookup(
       host,
       type: InternetAddressType.IPv4,
@@ -47,9 +46,6 @@ Future<int?> tcpPing(String host, int port, {int timeoutMs = 3000}) async {
 }
 
 /// Check a node from a mobile build without starting a local sing-box process.
-/// Android/iOS use the native libbox runtime, so there is no CLI executable for
-/// the desktop-style health check path. A TCP probe still verifies that the
-/// subscription endpoint is reachable and gives the user a useful latency.
 Future<HealthCheckResult> checkNodeTcpAvailability({
   required VpnNode node,
   int timeoutMs = 3000,
@@ -63,7 +59,7 @@ Future<HealthCheckResult> checkNodeTcpAvailability({
       target: 'Node',
     );
   }
-  return HealthCheckResult(
+  return const HealthCheckResult(
     ok: false,
     healthStatus: 'unavailable',
     target: 'Node',
@@ -71,26 +67,27 @@ Future<HealthCheckResult> checkNodeTcpAvailability({
   );
 }
 
-/// Check node availability by starting a sing-box instance and making a real request.
+/// Check a desktop node by establishing a real HTTP proxy tunnel through it.
 Future<HealthCheckResult> checkNodeAvailability({
   required String corePath,
   required String runtimeDir,
   required VpnNode node,
-  int timeoutMs = 9000,
-  String targetHost = 'www.gstatic.com',
+  int timeoutMs = 3000,
+  String targetHost = 'www.youtube.com',
   int targetPort = 443,
-  String targetLabel = 'HTTPS',
+  String targetLabel = 'YouTube',
 }) async {
   Process? child;
   String? configPath;
+  final stopwatch = Stopwatch()..start();
+
+  int remainingMs() => max(0, timeoutMs - stopwatch.elapsedMilliseconds);
 
   try {
     final dir = Directory(runtimeDir);
     if (!await dir.exists()) await dir.create(recursive: true);
 
-    // Find a free port
     final httpPort = await _freePort();
-
     configPath =
         '${runtimeDir}/health-${pid}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextDouble().toStringAsFixed(10)}.json';
 
@@ -104,30 +101,30 @@ Future<HealthCheckResult> checkNodeAvailability({
       cacheFile: false,
       logLevel: 'warn',
     );
+    await File(configPath).writeAsString(singBoxConfigToJson(config));
 
-    final configFile = File(configPath);
-    await configFile.writeAsString(singBoxConfigToJson(config));
-
-    child = await Process.start(corePath, ['run', '-c', configPath],
-        mode: ProcessStartMode.normal);
+    child = await Process.start(
+      corePath,
+      ['run', '-c', configPath],
+      mode: ProcessStartMode.normal,
+    );
     child.stdout.drain();
     child.stderr.drain();
 
-    await _waitForLocalPort(httpPort, min(2500, timeoutMs));
-    final geo = await _probeForeignExitIp(httpPort, timeoutMs);
-
-    if (!geo.isForeign) {
-      throw Exception(geo.error ?? '出口 IP 位于中国或无法确认');
+    await _waitForLocalPort(httpPort, min(1200, remainingMs()));
+    final response = await _probeHttpConnect(
+      proxyPort: httpPort,
+      targetHost: targetHost,
+      targetPort: targetPort,
+      timeoutMs: remainingMs(),
+    );
+    if (!isHttpProxyConnectEstablished(response)) {
+      throw Exception('proxy CONNECT failed: ${response.trim()}');
     }
-
-    // Keep availability validation separate from the displayed latency. The
-    // latter should match desktop clients: a direct TCP round-trip to the
-    // node endpoint, not the much slower geo-IP HTTP request.
-    final latency = await tcpPing(node.server, node.port, timeoutMs: timeoutMs);
 
     return HealthCheckResult(
       ok: true,
-      latency: latency,
+      latency: max(1, stopwatch.elapsedMilliseconds),
       healthStatus: 'available',
       target: targetLabel,
     );
@@ -150,52 +147,41 @@ Future<HealthCheckResult> checkNodeAvailability({
   }
 }
 
-class _GeoProbeResult {
-  const _GeoProbeResult(this.isForeign, {this.error});
-  final bool isForeign;
-  final String? error;
+/// Whether an HTTP proxy confirmed that it established the requested tunnel.
+bool isHttpProxyConnectEstablished(String response) {
+  return RegExp(r'^HTTP/1\.[01] 200\b', caseSensitive: false)
+      .hasMatch(response.trimLeft());
 }
 
-Future<_GeoProbeResult> _probeForeignExitIp(int proxyPort, int timeoutMs) async {
-  const endpoints = [
-    'https://api.ip.sb/geoip',
-    'https://ipinfo.io/json',
-    'https://ipapi.co/json/',
-  ];
-  final errors = <String>[];
-  for (final endpoint in endpoints) {
-    final result = await Process.run('curl.exe', [
-      '--silent',
-      '--show-error',
-      '--proxy',
-      'http://127.0.0.1:$proxyPort',
-      '--connect-timeout',
-      '3',
-      '--max-time',
-      max(5, (timeoutMs / 1000).ceil()).toString(),
-      endpoint,
-    ]);
-    if (result.exitCode != 0) {
-      errors.add(result.stderr.toString().trim());
-      continue;
-    }
-    try {
-      final body = jsonDecode(result.stdout.toString());
-      final countryCode =
-          (body['country_code'] ?? body['countryCode'] ?? body['country'] ?? '')
-              .toString()
-              .toUpperCase();
-      if (countryCode.isEmpty) {
-        errors.add('$endpoint 未返回国家/地区');
-        continue;
-      }
-      return _GeoProbeResult(countryCode != 'CN');
-    } catch (_) {
-      errors.add('$endpoint 返回格式无效');
-    }
+Future<String> _probeHttpConnect({
+  required int proxyPort,
+  required String targetHost,
+  required int targetPort,
+  required int timeoutMs,
+}) async {
+  if (timeoutMs <= 0) throw TimeoutException('node check timed out');
+  Socket? socket;
+  try {
+    socket = await Socket.connect(
+      '127.0.0.1',
+      proxyPort,
+      timeout: Duration(milliseconds: timeoutMs),
+    );
+    socket.write(
+      'CONNECT $targetHost:$targetPort HTTP/1.1\r\n'
+      'Host: $targetHost:$targetPort\r\n'
+      'Proxy-Connection: close\r\n\r\n',
+    );
+    await socket.flush();
+    return await utf8
+        .decoder
+        .bind(socket)
+        .transform(const LineSplitter())
+        .first
+        .timeout(Duration(milliseconds: timeoutMs));
+  } finally {
+    socket?.destroy();
   }
-  return _GeoProbeResult(false,
-      error: errors.where((e) => e.isNotEmpty).join('; '));
 }
 
 Future<int> _freePort() async {
@@ -206,15 +192,19 @@ Future<int> _freePort() async {
 }
 
 Future<void> _waitForLocalPort(int port, int timeoutMs) async {
+  if (timeoutMs <= 0) throw TimeoutException('health proxy did not start');
   final deadline = DateTime.now().millisecondsSinceEpoch + timeoutMs;
   while (DateTime.now().millisecondsSinceEpoch < deadline) {
     try {
-      final socket = await Socket.connect('127.0.0.1', port,
-          timeout: const Duration(milliseconds: 250));
+      final socket = await Socket.connect(
+        '127.0.0.1',
+        port,
+        timeout: const Duration(milliseconds: 250),
+      );
       await socket.close();
       return;
     } catch (_) {
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
     }
   }
   throw Exception('health proxy did not start');

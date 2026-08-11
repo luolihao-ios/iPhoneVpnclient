@@ -149,6 +149,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  // Last synchronous safeguard for process exit paths that bypass the tray
+  // command, including Windows session shutdown.
+  RestoreForgeProxySync();
   RemoveTray();
   flutter_controller_ = nullptr;
   Win32Window::OnDestroy();
@@ -209,6 +212,16 @@ void FlutterWindow::ShowTrayMenu() {
 LRESULT FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                                       WPARAM const wparam,
                                       LPARAM const lparam) noexcept {
+  if (message == WM_QUERYENDSESSION) {
+    // Windows is preparing to sign out, restart, or shut down. Restore the
+    // registry synchronously before the process is terminated.
+    RestoreForgeProxySync();
+    return TRUE;
+  }
+  if (message == WM_ENDSESSION && wparam == TRUE) {
+    RestoreForgeProxySync();
+    return 0;
+  }
   if (message == WM_CLOSE && !quitting_) {
     HideToTray();
     return 0;
