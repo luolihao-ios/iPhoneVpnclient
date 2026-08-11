@@ -38,6 +38,7 @@ Future<InitialScreeningSummary> runInitialNodeScreening({
   required void Function(VpnNode node, int latency) onTcpReachable,
   required void Function(VpnNode node, HealthCheckResult result) onNodeResult,
   required bool Function() isCancelled,
+  String validationTarget = 'HTTP 204',
   int tcpConcurrency = initialScreeningTcpConcurrency,
   int validationConcurrency = initialScreeningValidationConcurrency,
 }) async {
@@ -104,7 +105,7 @@ Future<InitialScreeningSummary> runInitialNodeScreening({
           result = HealthCheckResult(
             ok: false,
             healthStatus: 'unavailable',
-            target: 'HTTPS',
+            target: validationTarget,
             error: error.toString(),
           );
         }

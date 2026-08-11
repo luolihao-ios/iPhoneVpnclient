@@ -570,6 +570,7 @@ class AppProvider extends ChangeNotifier {
     try {
       final summary = await runInitialNodeScreening(
         nodes: nodesToCheck,
+        validationTarget: (_isAndroid || _isiOS) ? 'Node' : 'HTTP 204',
         tcpProbe: (node) async {
           final result = await _awaitNodeCheck(
             _tcpChecker(node),
@@ -592,10 +593,10 @@ class AppProvider extends ChangeNotifier {
             check,
             cancellation: cancellation.future,
             timeout: const Duration(seconds: 3),
-            onTimeout: const health.HealthCheckResult(
+            onTimeout: health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
-              target: 'HTTPS',
+              target: (_isAndroid || _isiOS) ? 'Node' : 'HTTP 204',
               error: '节点检查超时',
             ),
           );
@@ -692,10 +693,10 @@ class AppProvider extends ChangeNotifier {
                 : _fullChecker(node, corePath, healthDir),
             cancellation: cancellation.future,
             timeout: const Duration(seconds: 3),
-            onTimeout: const health.HealthCheckResult(
+            onTimeout: health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
-              target: 'HTTPS',
+              target: (_isAndroid || _isiOS) ? 'Node' : 'HTTP 204',
               error: '节点检查超时',
             ),
           );
@@ -703,7 +704,7 @@ class AppProvider extends ChangeNotifier {
           result = health.HealthCheckResult(
             ok: false,
             healthStatus: 'unavailable',
-            target: 'HTTPS',
+            target: (_isAndroid || _isiOS) ? 'Node' : 'HTTP 204',
             error: error.toString(),
           );
           log('Node health check failed for ${node.name}: $error');

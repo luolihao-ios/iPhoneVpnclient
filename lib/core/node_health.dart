@@ -18,7 +18,7 @@ class HealthCheckResult {
     required this.ok,
     this.latency,
     this.healthStatus = 'unknown',
-    this.target = 'YouTube',
+    this.target = 'HTTP 204',
     this.error,
   });
 }
