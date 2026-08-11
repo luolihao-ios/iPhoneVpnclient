@@ -39,10 +39,20 @@ int countAvailableNodes(List<VpnNode> nodes) {
 List<VpnNode> prepareNodesForLatencyTest(List<VpnNode> nodes) {
   return nodes.map((node) {
     return node.copyWith(
-      latencyMs: null,
       healthStatus: HealthStatus.checking,
+      clearLatencyMs: true,
+      clearHealthDetails: true,
     );
   }).toList();
+}
+
+/// Reset an unfinished node check without retaining stale health details.
+VpnNode resetNodeHealth(VpnNode node) {
+  return node.copyWith(
+    healthStatus: HealthStatus.unknown,
+    clearLatencyMs: true,
+    clearHealthDetails: true,
+  );
 }
 
 /// Update a single node's latency after a health check.
@@ -59,10 +69,10 @@ List<VpnNode> updateNodeLatency(
       );
     }
     return node.copyWith(
-      latencyMs: null,
       healthStatus: HealthStatus.unavailable,
       healthError: result.error,
       latencyCheckedAt: DateTime.now().millisecondsSinceEpoch,
+      clearLatencyMs: true,
     );
   }).toList();
 }

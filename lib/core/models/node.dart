@@ -158,6 +158,8 @@ class VpnNode {
     String? healthError,
     String? healthTarget,
     int? latencyCheckedAt,
+    bool clearLatencyMs = false,
+    bool clearHealthDetails = false,
   }) {
     return VpnNode(
       id: id ?? this.id,
@@ -188,10 +190,14 @@ class VpnNode {
       localAddress: localAddress ?? this.localAddress,
       reserved: reserved ?? this.reserved,
       healthStatus: healthStatus ?? this.healthStatus,
-      latencyMs: latencyMs ?? this.latencyMs,
-      healthError: healthError ?? this.healthError,
-      healthTarget: healthTarget ?? this.healthTarget,
-      latencyCheckedAt: latencyCheckedAt ?? this.latencyCheckedAt,
+      latencyMs: clearLatencyMs ? null : latencyMs ?? this.latencyMs,
+      healthError:
+          clearHealthDetails ? null : healthError ?? this.healthError,
+      healthTarget:
+          clearHealthDetails ? null : healthTarget ?? this.healthTarget,
+      latencyCheckedAt: clearHealthDetails
+          ? null
+          : latencyCheckedAt ?? this.latencyCheckedAt,
     );
   }
 
