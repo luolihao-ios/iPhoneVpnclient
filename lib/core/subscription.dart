@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:yaml/yaml.dart';
 import 'models/node.dart';
@@ -612,50 +614,97 @@ String _redactSubscriptionPreview(String text) {
   );
 }
 
+Future<http.Response> _requestSubscriptionOnce(
+  http.Client client,
+  Uri uri,
+  String rawUrl,
+  void Function(String message)? onDiagnostic,
+) async {
+  final response = await client.get(uri, headers: {
+    'User-Agent': 'ForgeDesktopVPN/0.1',
+    'Accept': 'text/plain, application/json, */*',
+  });
+  onDiagnostic?.call(
+    'subscription response: url=${_diagnosticUrl(rawUrl)} '
+    'status=${response.statusCode} contentType=${response.headers['content-type'] ?? '<none>'}',
+  );
+
+  // Some subscription endpoints only allow known proxy clients. FlClash
+  // sends this identity and commonly receives Clash YAML in response.
+  var effectiveResponse = response;
+  if (effectiveResponse.statusCode == 403) {
+    effectiveResponse = await client.get(uri, headers: {
+      'User-Agent': 'flclash',
+      'Accept': 'application/yaml, text/yaml, text/plain, */*',
+      'Cache-Control': 'no-cache',
+    });
+    onDiagnostic?.call(
+      'subscription retry: url=${_diagnosticUrl(rawUrl)} '
+      'status=${effectiveResponse.statusCode} userAgent=flclash',
+    );
+  }
+  if (effectiveResponse.statusCode == 403) {
+    // Keep a browser fallback for endpoints that permit browsers instead.
+    effectiveResponse = await client.get(uri, headers: {
+      'User-Agent':
+          'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
+    });
+    onDiagnostic?.call(
+      'subscription retry: url=${_diagnosticUrl(rawUrl)} '
+      'status=${effectiveResponse.statusCode} userAgent=browser',
+    );
+  }
+  return effectiveResponse;
+}
+
+bool _isTransientSubscriptionError(Object error) {
+  return error is SocketException ||
+      error is TimeoutException ||
+      error is http.ClientException;
+}
+
+Future<http.Response> _requestSubscriptionWithRetry(
+  http.Client client,
+  Uri uri,
+  String rawUrl,
+  void Function(String message)? onDiagnostic,
+) async {
+  const maxRetries = 2;
+  for (var attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await _requestSubscriptionOnce(
+        client,
+        uri,
+        rawUrl,
+        onDiagnostic,
+      );
+    } catch (error) {
+      if (!_isTransientSubscriptionError(error) || attempt == maxRetries) {
+        rethrow;
+      }
+      onDiagnostic?.call(
+        'subscription transient retry: url=${_diagnosticUrl(rawUrl)} '
+        'attempt=${attempt + 1}/$maxRetries '
+        'error=${_redactSubscriptionPreview(error.toString())}',
+      );
+      await Future<void>.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+    }
+  }
+  throw StateError('subscription retry loop ended unexpectedly');
+}
+
 /// Fetch subscription from a URL.
 Future<List<VpnNode>> fetchSubscription(String url,
     {http.Client? client, void Function(String message)? onDiagnostic}) async {
   final c = client ?? http.Client();
   try {
     final uri = Uri.parse(url);
-    final response = await c.get(uri, headers: {
-      'User-Agent': 'ForgeDesktopVPN/0.1',
-      'Accept': 'text/plain, application/json, */*',
-    });
-    onDiagnostic?.call(
-      'subscription response: url=${_diagnosticUrl(url)} '
-      'status=${response.statusCode} contentType=${response.headers['content-type'] ?? '<none>'}',
-    );
-
-    // Some subscription endpoints only allow known proxy clients. FlClash
-    // sends this identity and commonly receives Clash YAML in response.
-    var effectiveResponse = response;
-    if (effectiveResponse.statusCode == 403) {
-      effectiveResponse = await c.get(uri, headers: {
-        'User-Agent': 'flclash',
-        'Accept': 'application/yaml, text/yaml, text/plain, */*',
-        'Cache-Control': 'no-cache',
-      });
-      onDiagnostic?.call(
-        'subscription retry: url=${_diagnosticUrl(url)} '
-        'status=${effectiveResponse.statusCode} userAgent=flclash',
-      );
-    }
-    if (effectiveResponse.statusCode == 403) {
-      // Keep a browser fallback for endpoints that permit browsers instead.
-      effectiveResponse = await c.get(uri, headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 '
-                '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Cache-Control': 'no-cache',
-      });
-      onDiagnostic?.call(
-        'subscription retry: url=${_diagnosticUrl(url)} '
-        'status=${effectiveResponse.statusCode} userAgent=browser',
-      );
-    }
+    final effectiveResponse =
+        await _requestSubscriptionWithRetry(c, uri, url, onDiagnostic);
 
     if (effectiveResponse.statusCode != 200) {
       if (effectiveResponse.statusCode == 403) {
