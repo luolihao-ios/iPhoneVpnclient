@@ -28,6 +28,25 @@ class _RetryingSubscriptionClient extends http.BaseClient {
   }
 }
 
+class _DiagnosticSubscriptionClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    return http.StreamedResponse(
+      Stream<List<int>>.value(utf8.encode('''
+proxies:
+  - name: Demo
+    type: anytls
+    server: example.com
+    port: 443
+    password: super-secret
+''')),
+      200,
+      request: request,
+      headers: const {'content-type': 'application/yaml; charset=utf-8'},
+    );
+  }
+}
+
 void main() {
   test('resolves a pasted Stash install link to its HTTPS subscription', () {
     final encoded = Uri.encodeComponent('https://example.com/temporary-config');
@@ -71,6 +90,51 @@ void main() {
     expect((outbound['tls'] as Map)['server_name'], 'cdn.example.com');
   });
 
+  test('parses sing-box JSON outbounds and ignores non-proxy outbounds', () {
+    final nodes = parseSubscription(jsonEncode({
+      'outbounds': [
+        {
+          'type': 'direct',
+          'tag': 'direct',
+        },
+        {
+          'type': 'vless',
+          'tag': 'VLESS Reality',
+          'server': 'example.com',
+          'server_port': 443,
+          'uuid': '11111111-1111-1111-1111-111111111111',
+          'flow': 'xtls-rprx-vision',
+          'tls': {
+            'enabled': true,
+            'server_name': 'cdn.example.com',
+            'insecure': true,
+          },
+          'transport': {
+            'type': 'ws',
+            'path': '/edge',
+            'headers': {'Host': 'cdn.example.com'},
+          },
+        },
+        {
+          'type': 'shadowsocks',
+          'tag': 'SS',
+          'server': 'ss.example.com',
+          'server_port': 8388,
+          'method': 'aes-256-gcm',
+          'password': 'ss-secret',
+        },
+      ],
+    }));
+
+    expect(nodes, hasLength(2));
+    expect(nodes[0].name, 'VLESS Reality');
+    expect(nodes[0].serverName, 'cdn.example.com');
+    expect(nodes[0].transport, 'ws');
+    expect(nodes[0].path, '/edge');
+    expect(nodes[1].type, NodeType.shadowsocks);
+    expect(nodes[1].method, 'aes-256-gcm');
+  });
+
   test('retries a forbidden subscription request with the FlClash user agent',
       () async {
     final client = _RetryingSubscriptionClient();
@@ -84,6 +148,25 @@ void main() {
     expect(client.requests, hasLength(2));
     expect(client.requests.first.headers['User-Agent'], 'ForgeDesktopVPN/0.1');
     expect(client.requests.last.headers['User-Agent'], 'flclash');
+  });
+
+  test('reports sanitized subscription response diagnostics', () async {
+    final diagnostics = <String>[];
+
+    final nodes = await fetchSubscription(
+      'https://example.com/sub.yaml?token=do-not-log',
+      client: _DiagnosticSubscriptionClient(),
+      onDiagnostic: diagnostics.add,
+    );
+
+    expect(nodes, hasLength(1));
+    expect(diagnostics.any((line) => line.contains('status=200')), isTrue);
+    expect(diagnostics.any((line) => line.contains('contentType=')), isTrue);
+    expect(diagnostics.any((line) => line.contains('length=')), isTrue);
+    expect(
+        diagnostics.any((line) => line.contains('token=do-not-log')), isFalse);
+    expect(diagnostics.any((line) => line.contains('super-secret')), isFalse);
+    expect(diagnostics.any((line) => line.contains('preview=')), isFalse);
   });
 
   test('parses AnyTLS from a Clash YAML subscription', () {

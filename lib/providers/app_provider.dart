@@ -391,7 +391,10 @@ class AppProvider extends ChangeNotifier {
       throw Exception(
           'Unsupported subscription link. Paste an HTTPS or Stash install link.');
     }
-    final fetchedNodes = await fetchSubscription(resolvedUrl);
+    final fetchedNodes = await fetchSubscription(
+      resolvedUrl,
+      onDiagnostic: log,
+    );
     if (importRevision != _subscriptionRevision) return;
     _latencyBatchId++;
     _nodes = sortNodesByLatency(fetchedNodes);

@@ -89,7 +89,9 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
       serverName: node['sni']?.toString() ??
           node['serverName']?.toString() ??
           node['host']?.toString(),
-      insecure: node['allowInsecure'] == true ||
+      insecure: node['insecure'] == true ||
+          node['insecure'] == 'true' ||
+          node['allowInsecure'] == true ||
           node['allowInsecure'] == 'true' ||
           node['allowInsecure'] == 'True',
     );
@@ -100,6 +102,8 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
     final port = int.tryParse(node['port']?.toString() ?? '0') ?? 0;
     final uuid = node['uuid']?.toString() ?? node['id']?.toString() ?? '';
     final password = node['password']?.toString();
+    final transport =
+        (node['network'] ?? node['transport'] ?? 'tcp').toString();
     return VpnNode(
       id: node['nodeId']?.toString() ??
           _cryptoId(
@@ -113,6 +117,14 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
       tls: node['tls'] != false,
       serverName: node['serverName']?.toString() ?? node['sni']?.toString(),
       flow: node['flow']?.toString(),
+      transport: transport,
+      host: node['host']?.toString() ?? node['requestHost']?.toString(),
+      path: node['path']?.toString(),
+      insecure: node['insecure'] == true ||
+          node['insecure'] == 'true' ||
+          node['skip-cert-verify'] == true ||
+          node['allowInsecure'] == true ||
+          node['allowInsecure'] == 'true',
     );
   }
 
@@ -174,6 +186,65 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
   return null;
 }
 
+bool _singBoxTlsEnabled(dynamic value) {
+  if (value is Map) return value['enabled'] != false;
+  return value == true;
+}
+
+Map<String, dynamic> _singBoxOutboundToNode(Map<String, dynamic> outbound) {
+  final tls = outbound['tls'] is Map
+      ? Map<String, dynamic>.from(outbound['tls'] as Map)
+      : const <String, dynamic>{};
+  final transport = outbound['transport'] is Map
+      ? Map<String, dynamic>.from(outbound['transport'] as Map)
+      : const <String, dynamic>{};
+  final headers = transport['headers'] is Map
+      ? Map<String, dynamic>.from(transport['headers'] as Map)
+      : const <String, dynamic>{};
+  final localAddress = outbound['local_address'];
+
+  return <String, dynamic>{
+    ...outbound,
+    'name': outbound['tag'] ?? outbound['name'],
+    'port': outbound['server_port'] ?? outbound['port'],
+    'alterId': outbound['alter_id'] ?? outbound['alterId'],
+    'tls': _singBoxTlsEnabled(outbound['tls']),
+    'serverName': outbound['server_name'] ??
+        tls['server_name'] ??
+        tls['servername'] ??
+        outbound['sni'],
+    'insecure': outbound['insecure'] ?? tls['insecure'] ?? false,
+    'transport': transport['type'] ?? outbound['network'],
+    'path': transport['path'] ?? transport['service_name'] ?? outbound['path'],
+    'host': headers['Host'] ?? headers['host'] ?? outbound['host'],
+    'localAddress': localAddress is List && localAddress.isNotEmpty
+        ? localAddress.first
+        : localAddress,
+  };
+}
+
+List<VpnNode> _parseSingBoxJson(Map<String, dynamic> config) {
+  final outbounds = config['outbounds'];
+  if (outbounds is! List) {
+    throw const SubscriptionError('Invalid sing-box subscription format');
+  }
+
+  final nodes = outbounds
+      .whereType<Map>()
+      .map((outbound) => _singBoxOutboundToNode(
+            Map<String, dynamic>.from(outbound),
+          ))
+      .map(_normalizeJsonNode)
+      .where((node) => node != null)
+      .cast<VpnNode>()
+      .toList();
+  if (nodes.isEmpty) {
+    throw const SubscriptionError(
+        'No supported proxy nodes in sing-box subscription');
+  }
+  return nodes;
+}
+
 List<VpnNode> _parseJsonSubscription(String text) {
   final value = json.decode(text);
   if (value is List) {
@@ -187,6 +258,9 @@ List<VpnNode> _parseJsonSubscription(String text) {
     throw const SubscriptionError('Invalid subscription format');
 
   final map = value as Map<String, dynamic>;
+  if (map['outbounds'] is List) {
+    return _parseSingBoxJson(map);
+  }
   final msg = map['msg'] ?? map['message'] ?? map['error'] ?? map['detail'];
   if (msg != null && msg.toString().isNotEmpty) {
     final hasNodes = [
@@ -269,10 +343,14 @@ List<VpnNode> _parseClashYaml(String text) {
 
 VpnNode? _parseSsUri(String uri) {
   final withoutScheme = uri.substring('ss://'.length);
-  final parts = withoutScheme.split('#');
-  final main = parts[0];
-  final decodedName =
-      Uri.decodeComponent(parts.length > 1 ? parts[1] : 'Shadowsocks');
+  final fragmentIndex = withoutScheme.indexOf('#');
+  final main = fragmentIndex >= 0
+      ? withoutScheme.substring(0, fragmentIndex)
+      : withoutScheme;
+  final rawName = fragmentIndex >= 0
+      ? withoutScheme.substring(fragmentIndex + 1)
+      : 'Shadowsocks';
+  final decodedName = _decodeNodeName(rawName);
   final queryParts = main.split('?');
   final userinfoRaw = queryParts[0];
   final queryRaw = queryParts.length > 1 ? queryParts[1] : '';
@@ -308,6 +386,17 @@ VpnNode? _parseSsUri(String uri) {
     password: password,
     plugin: params['plugin'],
   );
+}
+
+String _decodeNodeName(String rawName) {
+  if (!rawName.contains('%')) return rawName;
+  try {
+    return Uri.decodeComponent(rawName);
+  } on FormatException {
+    return rawName;
+  } on ArgumentError {
+    return rawName;
+  }
 }
 
 VpnNode? _parseVmessUri(String uri) {
@@ -385,6 +474,36 @@ VpnNode? _parseLine(String line) {
   return null;
 }
 
+List<VpnNode> _parseUriLines(
+  String text, {
+  void Function(String message)? onDiagnostic,
+}) {
+  final nodes = <VpnNode>[];
+  var skipped = 0;
+  for (final line in text.split(RegExp(r'\r?\n'))) {
+    final trimmed = line.trim();
+    final isSupportedUri = trimmed.startsWith('ss://') ||
+        trimmed.startsWith('vmess://') ||
+        trimmed.startsWith('vless://') ||
+        trimmed.startsWith('trojan://') ||
+        trimmed.startsWith('anytls://');
+    try {
+      final node = _parseLine(trimmed);
+      if (node != null && node.isUsable) {
+        nodes.add(node);
+      } else if (isSupportedUri) {
+        skipped++;
+      }
+    } catch (_) {
+      if (isSupportedUri) skipped++;
+    }
+  }
+  onDiagnostic?.call(
+    'subscription URI parsing: parsed=${nodes.length} skipped=$skipped',
+  );
+  return nodes;
+}
+
 /// Resolve a pasted subscription URL or an app-specific install wrapper.
 String normalizeSubscriptionInput(String input) {
   return input
@@ -430,7 +549,10 @@ List<VpnNode> _filterSubscriptionMetadata(List<VpnNode> nodes) {
 }
 
 /// Parse raw subscription text and return list of nodes.
-List<VpnNode> parseSubscription(String rawText) {
+List<VpnNode> parseSubscription(
+  String rawText, {
+  void Function(String message)? onDiagnostic,
+}) {
   final source = rawText.trim();
   if (source.isEmpty) return [];
 
@@ -465,19 +587,34 @@ List<VpnNode> parseSubscription(String rawText) {
     }
   }
 
-  final lines = (decoded.isNotEmpty ? decoded : source).split(RegExp(r'\r?\n'));
-  final nodes = lines
-      .map(_parseLine)
-      .where((n) => n != null)
-      .cast<VpnNode>()
-      .where((n) => n.isUsable)
-      .toList();
+  final nodes = _parseUriLines(
+    decoded.isNotEmpty ? decoded : source,
+    onDiagnostic: onDiagnostic,
+  );
   return _dedupeNodes(_filterSubscriptionMetadata(nodes));
+}
+
+String _diagnosticUrl(String rawUrl) {
+  final uri = Uri.tryParse(rawUrl);
+  if (uri == null) return '<invalid-url>';
+  return uri.replace(query: '', fragment: '').toString();
+}
+
+String _redactSubscriptionPreview(String text) {
+  var preview = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  preview = preview.length > 200 ? '${preview.substring(0, 200)}…' : preview;
+  return preview.replaceAllMapped(
+    RegExp(
+      r'(password|passwd|uuid|id|token|secret|private[_-]?key)\s*[:=]\s*[^,}\s]+',
+      caseSensitive: false,
+    ),
+    (match) => '${match.group(1)}=<redacted>',
+  );
 }
 
 /// Fetch subscription from a URL.
 Future<List<VpnNode>> fetchSubscription(String url,
-    {http.Client? client}) async {
+    {http.Client? client, void Function(String message)? onDiagnostic}) async {
   final c = client ?? http.Client();
   try {
     final uri = Uri.parse(url);
@@ -485,6 +622,10 @@ Future<List<VpnNode>> fetchSubscription(String url,
       'User-Agent': 'ForgeDesktopVPN/0.1',
       'Accept': 'text/plain, application/json, */*',
     });
+    onDiagnostic?.call(
+      'subscription response: url=${_diagnosticUrl(url)} '
+      'status=${response.statusCode} contentType=${response.headers['content-type'] ?? '<none>'}',
+    );
 
     // Some subscription endpoints only allow known proxy clients. FlClash
     // sends this identity and commonly receives Clash YAML in response.
@@ -495,6 +636,10 @@ Future<List<VpnNode>> fetchSubscription(String url,
         'Accept': 'application/yaml, text/yaml, text/plain, */*',
         'Cache-Control': 'no-cache',
       });
+      onDiagnostic?.call(
+        'subscription retry: url=${_diagnosticUrl(url)} '
+        'status=${effectiveResponse.statusCode} userAgent=flclash',
+      );
     }
     if (effectiveResponse.statusCode == 403) {
       // Keep a browser fallback for endpoints that permit browsers instead.
@@ -506,6 +651,10 @@ Future<List<VpnNode>> fetchSubscription(String url,
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         'Cache-Control': 'no-cache',
       });
+      onDiagnostic?.call(
+        'subscription retry: url=${_diagnosticUrl(url)} '
+        'status=${effectiveResponse.statusCode} userAgent=browser',
+      );
     }
 
     if (effectiveResponse.statusCode != 200) {
@@ -517,7 +666,28 @@ Future<List<VpnNode>> fetchSubscription(String url,
       throw Exception(
           'Subscription request failed: HTTP ${effectiveResponse.statusCode}');
     }
-    return parseSubscription(effectiveResponse.body);
+    final bodyBytes = effectiveResponse.bodyBytes;
+    final body = utf8.decode(bodyBytes, allowMalformed: true);
+    onDiagnostic?.call(
+      'subscription body: url=${_diagnosticUrl(url)} '
+      'status=${effectiveResponse.statusCode} '
+      'contentType=${effectiveResponse.headers['content-type'] ?? '<none>'} '
+      'length=${bodyBytes.length}',
+    );
+    try {
+      final nodes = parseSubscription(body, onDiagnostic: onDiagnostic);
+      onDiagnostic?.call('subscription parsed: nodes=${nodes.length}');
+      return nodes;
+    } catch (error) {
+      onDiagnostic?.call('subscription parse failed: $error');
+      rethrow;
+    }
+  } catch (error) {
+    onDiagnostic?.call(
+      'subscription request failed: url=${_diagnosticUrl(url)} '
+      'error=${_redactSubscriptionPreview(error.toString())}',
+    );
+    rethrow;
   } finally {
     if (client == null) c.close();
   }
