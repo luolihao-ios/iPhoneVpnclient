@@ -7,7 +7,7 @@ typedef NodeValidator = Future<HealthCheckResult> Function(VpnNode node);
 const initialScreeningQuickWindow = Duration(seconds: 15);
 const initialScreeningOverallLimit = Duration(seconds: 45);
 const initialScreeningMinimumAvailable = 5;
-const initialScreeningTcpConcurrency = 32;
+const initialScreeningTcpConcurrency = 48;
 const initialScreeningValidationConcurrency = 3;
 
 class InitialScreeningSummary {
@@ -78,8 +78,6 @@ Future<InitialScreeningSummary> runInitialNodeScreening({
           return;
         }
         final node = nodes[tcpCursor++];
-        onNodeChecking(node);
-
         int? latency;
         try {
           latency = await tcpProbe(node);

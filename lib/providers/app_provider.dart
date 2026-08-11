@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../core/models/node.dart';
 import '../core/node_health.dart' as health;
+import '../core/initial_node_screening.dart';
 import '../core/node_latency.dart';
 import '../core/node_storage.dart';
 import '../core/subscription.dart';
@@ -93,10 +94,39 @@ class RuntimeState {
   }
 }
 
+typedef SubscriptionLoader = Future<List<VpnNode>> Function(
+  String url,
+  void Function(String message) onDiagnostic,
+);
+typedef NodeTcpChecker = Future<health.HealthCheckResult> Function(
+  VpnNode node,
+);
+typedef NodeFullChecker = Future<health.HealthCheckResult> Function(
+  VpnNode node,
+  String corePath,
+  String runtimeDir,
+);
+
 /// Main application state provider.
 class AppProvider extends ChangeNotifier {
-  AppProvider({WindowsProxyService? windowsProxy})
-      : _windowsProxy = windowsProxy ?? WindowsProxyService();
+  AppProvider({
+    WindowsProxyService? windowsProxy,
+    SubscriptionLoader? subscriptionLoader,
+    NodeTcpChecker? tcpChecker,
+    NodeFullChecker? fullChecker,
+  })  : _windowsProxy = windowsProxy ?? WindowsProxyService(),
+        _subscriptionLoader = subscriptionLoader ??
+            ((url, onDiagnostic) =>
+                fetchSubscription(url, onDiagnostic: onDiagnostic)),
+        _tcpChecker = tcpChecker ??
+            ((node) => health.checkNodeTcpAvailability(node: node)),
+        _fullChecker = fullChecker ??
+            ((node, corePath, runtimeDir) => health.checkNodeAvailability(
+                  corePath: corePath,
+                  runtimeDir: runtimeDir,
+                  node: node,
+                )),
+        _hasInjectedHealthCheckers = tcpChecker != null || fullChecker != null;
   static const _subscriptionUrlKey = 'subscription_url';
   static const _nodesKey = 'subscription_nodes';
   static const _selectedNodeKey = 'selected_node_id';
@@ -113,6 +143,10 @@ class AppProvider extends ChangeNotifier {
   AndroidVpnService? _androidVpn;
   IosVpnService? _iosVpn;
   final WindowsProxyService _windowsProxy;
+  final SubscriptionLoader _subscriptionLoader;
+  final NodeTcpChecker _tcpChecker;
+  final NodeFullChecker _fullChecker;
+  final bool _hasInjectedHealthCheckers;
   Timer? _statsTimer;
   int _latencyBatchId = 0;
   int _subscriptionRevision = 0;
@@ -190,8 +224,8 @@ class AppProvider extends ChangeNotifier {
     // Restore saved subscription URL
     await _restoreSubscription();
     if (_nodes.isNotEmpty) {
-      unawaited(checkAllNodes().catchError((error) {
-        log('Startup node health check failed: $error');
+      unawaited(startInitialNodeScreening().catchError((error) {
+        log('Startup node screening failed: $error');
       }));
     }
     unawaited(checkForUpdates());
@@ -386,14 +420,15 @@ class AppProvider extends ChangeNotifier {
   /// Import nodes from a subscription URL.
   Future<void> importSubscription(String url) async {
     final importRevision = ++_subscriptionRevision;
+    stopNodeChecks();
     final resolvedUrl = resolveSubscriptionInput(url);
     if (resolvedUrl == null) {
       throw Exception(
           'Unsupported subscription link. Paste an HTTPS or Stash install link.');
     }
-    final fetchedNodes = await fetchSubscription(
+    final fetchedNodes = await _subscriptionLoader(
       resolvedUrl,
-      onDiagnostic: log,
+      log,
     );
     if (importRevision != _subscriptionRevision) return;
     _latencyBatchId++;
@@ -412,13 +447,13 @@ class AppProvider extends ChangeNotifier {
     await _persistNodes();
     notifyListeners();
 
-    // Start health check
-    checkAllNodes();
+    unawaited(startInitialNodeScreening());
   }
 
   /// Import nodes from raw subscription text.
   Future<void> importSubscriptionText(String rawText) async {
     ++_subscriptionRevision;
+    stopNodeChecks();
     final parsedNodes = parseSubscription(rawText);
     _latencyBatchId++;
     _nodes = sortNodesByLatency(parsedNodes);
@@ -428,6 +463,7 @@ class AppProvider extends ChangeNotifier {
     }
     await _persistNodes();
     notifyListeners();
+    unawaited(startInitialNodeScreening());
   }
 
   /// Select a node.
@@ -442,12 +478,16 @@ class AppProvider extends ChangeNotifier {
   /// Ping a single node.
   Future<health.HealthCheckResult?> pingNode(String nodeId) async {
     final node = nodes.firstWhere((n) => n.id == nodeId);
-    if (_controller == null && !_isAndroid && !_isiOS) return null;
+    if (!_canCheckNodes) return null;
 
     _latencyBatchId++;
     _nodes = _nodes
         .map((n) => n.id == nodeId
-            ? n.copyWith(latencyMs: null, healthStatus: HealthStatus.checking)
+            ? n.copyWith(
+                healthStatus: HealthStatus.checking,
+                clearLatencyMs: true,
+                clearHealthDetails: true,
+              )
             : n)
         .toList();
     notifyListeners();
@@ -455,23 +495,142 @@ class AppProvider extends ChangeNotifier {
     if (_isAndroid || _isiOS) {
       // Mobile builds use the native libbox runtime and do not ship a CLI
       // executable for the desktop-style local proxy health check.
-      final result = await health.checkNodeTcpAvailability(node: node);
+      final result = await _tcpChecker(node);
       _nodes = updateNodeLatency(_nodes, nodeId, result);
       _runtime = _runtime.copyWith(latency: selectedNode?.latencyMs);
       notifyListeners();
       return result;
     }
 
-    final result = await health.checkNodeAvailability(
-      corePath: _controller!.corePath,
-      runtimeDir: '${_controller!.runtimeDir}/health',
-      node: node,
+    final result = await _fullChecker(
+      node,
+      _controller?.corePath ?? '',
+      '${_controller?.runtimeDir ?? '/'}/health',
     );
 
     _nodes = updateNodeLatency(_nodes, nodeId, result);
     _runtime = _runtime.copyWith(latency: selectedNode?.latencyMs);
     notifyListeners();
     return result;
+  }
+
+  bool get _canCheckNodes =>
+      _isAndroid || _isiOS || _controller != null || _hasInjectedHealthCheckers;
+
+  void stopNodeChecks() {
+    _latencyBatchId++;
+    _nodes = _nodes
+        .map((node) => node.healthStatus == HealthStatus.checking
+            ? resetNodeHealth(node)
+            : node)
+        .toList();
+    _runtime = _runtime.copyWith(checkingNodes: false);
+    unawaited(_persistNodes());
+    notifyListeners();
+  }
+
+  Future<void> startInitialNodeScreening() async {
+    if (_nodes.isEmpty || !_canCheckNodes) return;
+
+    final batchId = ++_latencyBatchId;
+    _nodes = _nodes.map(resetNodeHealth).toList();
+    final nodesToCheck = List<VpnNode>.from(_nodes);
+    _runtime = _runtime.copyWith(
+      checkingNodes: true,
+      latency: selectedNode?.latencyMs,
+    );
+    notifyListeners();
+
+    bool isCurrentBatch() => batchId == _latencyBatchId;
+
+    void updateNode(String nodeId, VpnNode Function(VpnNode node) update,
+        {bool notify = true}) {
+      if (!isCurrentBatch()) return;
+      _nodes = _nodes
+          .map((node) => node.id == nodeId ? update(node) : node)
+          .toList();
+      if (notify) notifyListeners();
+    }
+
+    final corePath = _controller?.corePath ?? '';
+    final healthDir = '${_controller?.runtimeDir ?? '/'}/health';
+
+    try {
+      final summary = await runInitialNodeScreening(
+        nodes: nodesToCheck,
+        tcpProbe: (node) async {
+          final result = await _tcpChecker(node).timeout(
+            const Duration(milliseconds: 1200),
+            onTimeout: () => const health.HealthCheckResult(
+              ok: false,
+              healthStatus: 'unavailable',
+              target: 'Node',
+              error: 'TCP connection timed out',
+            ),
+          );
+          return result.ok ? result.latency : null;
+        },
+        validate: (node) {
+          final check = (_isAndroid || _isiOS)
+              ? _tcpChecker(node)
+              : _fullChecker(node, corePath, healthDir);
+          return check.timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => const health.HealthCheckResult(
+              ok: false,
+              healthStatus: 'unavailable',
+              target: 'HTTPS',
+              error: '节点检查超时',
+            ),
+          );
+        },
+        onNodeChecking: (node) {
+          updateNode(
+            node.id,
+            (current) => current.copyWith(
+              healthStatus: HealthStatus.checking,
+              clearLatencyMs: true,
+              clearHealthDetails: true,
+            ),
+          );
+        },
+        onTcpReachable: (node, _) {
+          updateNode(node.id, resetNodeHealth, notify: false);
+        },
+        onNodeResult: (node, result) {
+          updateNode(
+            node.id,
+            (current) =>
+                updateNodeLatency([current], current.id, result).single,
+            notify: result.target != 'Node',
+          );
+        },
+        isCancelled: () => !isCurrentBatch(),
+      );
+      if (isCurrentBatch()) {
+        log(
+          'Initial node screening finished: tcp=${summary.tcpCheckedCount} '
+          'validated=${summary.validatedCount} available=${summary.availableCount} '
+          'timedOut=${summary.timedOut}',
+        );
+      }
+    } catch (error) {
+      if (isCurrentBatch()) log('Initial node screening failed: $error');
+    } finally {
+      if (isCurrentBatch()) {
+        _nodes = _nodes
+            .map((node) => node.healthStatus == HealthStatus.checking
+                ? resetNodeHealth(node)
+                : node)
+            .toList();
+        _runtime = _runtime.copyWith(
+          checkingNodes: false,
+          latency: selectedNode?.latencyMs,
+        );
+        await _persistNodes();
+        notifyListeners();
+      }
+    }
   }
 
   /// Check all nodes' health.
@@ -503,12 +662,8 @@ class AppProvider extends ChangeNotifier {
         late health.HealthCheckResult result;
         try {
           result = await ((_isAndroid || _isiOS)
-                  ? health.checkNodeTcpAvailability(node: node)
-                  : health.checkNodeAvailability(
-                      corePath: corePath,
-                      runtimeDir: healthDir,
-                      node: node,
-                    ))
+                  ? _tcpChecker(node)
+                  : _fullChecker(node, corePath, healthDir))
               .timeout(
             const Duration(seconds: 10),
             onTimeout: () => const health.HealthCheckResult(
@@ -534,13 +689,12 @@ class AppProvider extends ChangeNotifier {
       }
     });
 
-    void markRemainingUnavailable(String reason) {
+    void resetRemainingChecks(String reason) {
       if (batchId != _latencyBatchId) return;
       _latencyBatchId++;
       _nodes = _nodes
           .map((node) => node.healthStatus == HealthStatus.checking
-              ? node.copyWith(
-                  healthStatus: HealthStatus.unavailable, latencyMs: null)
+              ? resetNodeHealth(node)
               : node)
           .toList();
       _runtime = _runtime.copyWith(checkingNodes: false);
@@ -552,13 +706,13 @@ class AppProvider extends ChangeNotifier {
       await Future.wait(workers).timeout(const Duration(seconds: 30));
     } on TimeoutException {
       if (batchId == _latencyBatchId) {
-        markRemainingUnavailable(
+        resetRemainingChecks(
             'Node health check batch timed out after 30 seconds');
       }
       return;
     } catch (error) {
       log('Node health check batch failed: $error');
-      markRemainingUnavailable('Node health check batch stopped unexpectedly');
+      resetRemainingChecks('Node health check batch stopped unexpectedly');
     }
     if (batchId == _latencyBatchId) {
       _runtime = _runtime.copyWith(checkingNodes: false);
