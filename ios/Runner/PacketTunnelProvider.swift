@@ -19,6 +19,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
     private var commandServer: LibboxCommandServer?
     private lazy var platformInterface = LibboxPlatformInterface(provider: self)
     private var logLines = [String]()
+    private var routingDiagnostics = [String]()
     private var configurationSummary = [String: Any]()
     private let logLock = NSLock()
 
@@ -75,7 +76,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
                 "configSummary": configurationSummary,
             ])
         case "logs":
-            return response(["lines": recentLogs()])
+            return response([
+                "lines": recentLogs(),
+                "routingDiagnostics": recentRoutingDiagnostics(),
+            ])
         default:
             return response(["error": "unknown request"])
         }
@@ -85,6 +89,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
         logLock.lock()
         logLines.append(line)
         if logLines.count > 300 { logLines.removeFirst(logLines.count - 300) }
+        if line.hasPrefix("[diagnostic] routing") || line.hasPrefix("[diagnostic] expectation") {
+            routingDiagnostics.append(line)
+            if routingDiagnostics.count > 40 {
+                routingDiagnostics.removeFirst(routingDiagnostics.count - 40)
+            }
+        }
         logLock.unlock()
     }
 
@@ -337,6 +347,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
         logLock.lock()
         defer { logLock.unlock() }
         return logLines
+    }
+
+    private func recentRoutingDiagnostics() -> [String] {
+        logLock.lock()
+        defer { logLock.unlock() }
+        return routingDiagnostics
     }
 
     private func response(_ value: [String: Any]) -> Data? {
