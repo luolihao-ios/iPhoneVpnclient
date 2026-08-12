@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docs/project-privacy-policy.html'
+      - 'docs/downloads/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
