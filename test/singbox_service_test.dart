@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forge_vpn_flutter/core/models/node.dart';
+import 'package:forge_vpn_flutter/core/remote_dns.dart';
 import 'package:forge_vpn_flutter/services/singbox_service.dart';
 
 void main() {
@@ -55,5 +57,36 @@ void main() {
     expect(controller.snapshot.running, isFalse);
     expect(controller.snapshot.exitCode, isNotNull);
     expect(stateChanges, isNot(contains(true)));
+  });
+
+  test('Windows 控制器把选中的 DoH 写入 sing-box 配置', () async {
+    if (!Platform.isWindows) return;
+    final directory = await Directory.systemTemp.createTemp('forge-vpn-dns-');
+    addTearDown(() => directory.delete(recursive: true));
+    final longRunningCore = File(
+      '${directory.path}${Platform.pathSeparator}long-running.cmd',
+    )..writeAsStringSync('@echo off\r\nping -n 6 127.0.0.1 >nul\r\n');
+    final controller = SingBoxController(
+      corePath: longRunningCore.path,
+      runtimeDir: directory.path,
+      startupGracePeriod: const Duration(milliseconds: 300),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.connect(
+      node: const VpnNode(
+        id: 'test',
+        name: 'test',
+        type: NodeType.vmess,
+        server: '127.0.0.1',
+        port: 443,
+      ),
+      remoteDnsProvider: RemoteDnsProvider.google,
+    );
+
+    final config = jsonDecode(
+      await File(controller.configPath!).readAsString(),
+    ) as Map<String, dynamic>;
+    expect((config['dns'] as Map)['final'], 'remote-google');
   });
 }
