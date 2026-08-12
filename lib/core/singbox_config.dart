@@ -158,7 +158,11 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
   }
 }
 
-List<Map<String, dynamic>> _dnsRulesForNode(VpnNode? node, String mode) {
+List<Map<String, dynamic>> _dnsRulesForNode(
+  VpnNode? node,
+  String mode,
+  RemoteDnsProvider remoteDnsProvider,
+) {
   final rules = <Map<String, dynamic>>[];
   if (node != null && node.server.isNotEmpty && !_isIpAddress(node.server)) {
     rules.add({
@@ -167,6 +171,10 @@ List<Map<String, dynamic>> _dnsRulesForNode(VpnNode? node, String mode) {
     });
   }
   if (mode == 'rule') {
+    rules.add({
+      'domain_suffix': _foreignDomainOverrides,
+      'server': 'remote-${remoteDnsEndpoint(remoteDnsProvider).id}',
+    });
     rules.add({
       'rule_set': ['geosite-cn'],
       'server': 'local',
@@ -274,7 +282,7 @@ Map<String, dynamic> buildSingBoxConfig({
         for (final provider in RemoteDnsProvider.values)
           remoteDnsEndpoint(provider).toSingBoxServer(),
       ],
-      'rules': _dnsRulesForNode(node, mode),
+      'rules': _dnsRulesForNode(node, mode, remoteDnsProvider),
       'final': mode == 'direct'
           ? 'local'
           : 'remote-${selectedRemoteDns.id}',

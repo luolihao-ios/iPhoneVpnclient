@@ -391,6 +391,18 @@ proxies:
         }),
       ),
     );
+    expect(
+      (dns['rules'] as List).cast<Map>(),
+      contains(
+        predicate<Map>((rule) {
+          final domains =
+              (rule['domain_suffix'] as List?)?.cast<String>() ?? const [];
+          return rule['server'] == 'remote-cloudflare' &&
+              domains.contains('google.com') &&
+              domains.contains('youtube.com');
+        }),
+      ),
+    );
   });
 
   test('normalizes pasted subscription URLs from mobile clipboards', () {

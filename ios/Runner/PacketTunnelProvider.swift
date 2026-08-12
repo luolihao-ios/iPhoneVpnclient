@@ -176,7 +176,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
                       let cidrs = rule["ip_cidr"] as? [String] else {
                     continue
                 }
-                if configuredDNSFinal == "remote" {
+                if configuredDNSFinal == "remote" || configuredDNSFinal.hasPrefix("remote-") {
                     rule["ip_cidr"] = cidrs.filter { $0 != "1.1.1.1/32" }
                 }
                 rules[index] = rule
