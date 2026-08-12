@@ -1,5 +1,12 @@
 # Forge VPN 项目总结
 
+### 25. 三组远程 DNS 自动切换（2026-08-12）
+- 内置 Cloudflare、Google、Quad9 三组 HTTPS DoH，固定使用 443 端口、IP 地址和 TLS 名称，并通过当前代理链路访问。
+- VPN 连接后使用 `http://www.gstatic.com/generate_204` 做真实链路验证，仅 HTTP 204 视为成功；当前解析器失败时自动停止旧连接并切换下一组。
+- 最近一次验证成功的 DNS 组会保存到本地，下次连接优先尝试；用户主动断开、切换节点或应用退出时会取消未完成的切换，避免旧回调覆盖新状态。
+- iOS、Android 和 Windows 共用同一套切换协调逻辑；移动端等待系统 TUN 进入 connected 后再验证，Windows 通过本地 HTTP 代理验证。
+- 三组均失败时保持未连接并显示统一提示：`三组远程 DNS/代理链路均不可用，请检查节点或网络`。
+
 ### 24. Windows HTTP 204 节点可用性验证（2026-08-12）
 
 - Windows 节点检测改为通过待测节点请求 `http://www.gstatic.com/generate_204`。
