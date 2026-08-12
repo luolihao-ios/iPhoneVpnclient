@@ -151,6 +151,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
 
         let configuredDNSFinal = dns["final"] as? String ?? "local"
         root["dns"] = dns
+        appendDNSRoutingDiagnostics(dns: dns, root: root, phase: "before-rewrite")
 
         // Only remote DNS needs the Cloudflare address removed from the
         // direct-rule list. Global mode intentionally keeps the stable local
@@ -185,11 +186,56 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
             root["route"] = route
         }
 
+        appendDNSRoutingDiagnostics(dns: root["dns"] as? [String: Any] ?? dns,
+                                    root: root,
+                                    phase: "after-rewrite")
+
         guard let output = try? JSONSerialization.data(withJSONObject: root),
               let rewritten = String(data: output, encoding: .utf8) else {
             return configuration
         }
         return rewritten
+    }
+
+    /// Log only routing metadata needed to diagnose DNS pollution or a
+    /// mistaken direct match. Domain names are fixed public test domains;
+    /// credentials and subscription content are never included.
+    private func appendDNSRoutingDiagnostics(dns: [String: Any],
+                                             root: [String: Any],
+                                             phase: String) {
+        let dnsFinal = dns["final"] as? String ?? "<missing>"
+        let dnsRules = (dns["rules"] as? [[String: Any]] ?? []).enumerated().map {
+            index, rule in
+            let domains = (rule["domain_suffix"] as? [String] ?? []).joined(separator: "|")
+            let exact = (rule["domain"] as? [String] ?? []).joined(separator: "|")
+            let ruleSet = (rule["rule_set"] as? [String] ?? []).joined(separator: "|")
+            let server = rule["server"] as? String ?? "<none>"
+            let match = [exact, domains, ruleSet].filter { !$0.isEmpty }.joined(separator: ";")
+            let description = match.isEmpty ? "any" : match
+            return "\(index):\(description)=>\(server)"
+        }.joined(separator: ",")
+
+        let route = root["route"] as? [String: Any] ?? [:]
+        let routeFinal = route["final"] as? String ?? "<missing>"
+        let routeRules = (route["rules"] as? [[String: Any]] ?? []).enumerated().map {
+            index, rule in
+            let domains = (rule["domain_suffix"] as? [String] ?? []).joined(separator: "|")
+            let exact = (rule["domain"] as? [String] ?? []).joined(separator: "|")
+            let ruleSet = (rule["rule_set"] as? [String] ?? []).joined(separator: "|")
+            let action = rule["action"] as? String
+            let outbound = rule["outbound"] as? String
+            let target = action ?? outbound ?? "<none>"
+            let match = [exact, domains, ruleSet].filter { !$0.isEmpty }.joined(separator: ";")
+            let description = match.isEmpty ? "any" : match
+            return "\(index):\(description)=>\(target)"
+        }.joined(separator: ",")
+
+        appendLog("[diagnostic] routing phase=\(phase) dnsFinal=\(dnsFinal) "
+            + "dnsRules=\(dnsRules)")
+        appendLog("[diagnostic] routing phase=\(phase) routeFinal=\(routeFinal) "
+            + "routeRules=\(routeRules)")
+        appendLog("[diagnostic] routing expectation google.com/youtube.com "
+            + "dns=\(dnsFinal) route=\(routeFinal)")
     }
 
     /// Emit a redacted configuration summary so an iOS device log can tell
