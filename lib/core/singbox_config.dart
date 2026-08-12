@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'models/node.dart';
+import 'remote_dns.dart';
 
 const int defaultHttpPort = 2080;
 const int defaultSocksPort = 2081;
@@ -186,7 +187,9 @@ Map<String, dynamic> buildSingBoxConfig({
   bool includeApi = true,
   bool cacheFile = true,
   String logLevel = 'info',
+  RemoteDnsProvider remoteDnsProvider = RemoteDnsProvider.cloudflare,
 }) {
+  final selectedRemoteDns = remoteDnsEndpoint(remoteDnsProvider);
   final outbounds = [
     _nodeToOutbound(node),
     {'type': 'direct', 'tag': 'direct'},
@@ -234,7 +237,6 @@ Map<String, dynamic> buildSingBoxConfig({
       'ip_cidr': [
         '114.114.114.114/32',
         '223.5.5.5/32',
-        '1.1.1.1/32',
       ],
       'outbound': 'direct',
     },
@@ -269,20 +271,13 @@ Map<String, dynamic> buildSingBoxConfig({
           'server': '223.5.5.5',
           'server_port': 53,
         },
-        {
-          'type': 'tls',
-          'tag': 'remote',
-          'server': '1.1.1.1',
-          'server_port': 853,
-          'tls': {'enabled': true, 'server_name': 'cloudflare-dns.com'},
-          'detour': 'proxy',
-        },
+        for (final provider in RemoteDnsProvider.values)
+          remoteDnsEndpoint(provider).toSingBoxServer(),
       ],
       'rules': _dnsRulesForNode(node, mode),
-      // Keep DNS resolution on the stable local resolver. The China domain/IP
-      // rule sets still decide routing; remote DoT through AnyTLS is unreliable
-      // on some nodes and can block every connection.
-      'final': 'local',
+      'final': mode == 'direct'
+          ? 'local'
+          : 'remote-${selectedRemoteDns.id}',
       'strategy': 'prefer_ipv4',
     },
     'inbounds': inbounds,
