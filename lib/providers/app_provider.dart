@@ -14,9 +14,6 @@ import '../core/subscription.dart';
 import '../core/stats.dart';
 import '../core/singbox_config.dart';
 import '../core/desktop_vpn_diagnostics.dart';
-import '../core/connection_health.dart';
-import '../core/dns_fallback_coordinator.dart';
-import '../core/remote_dns.dart';
 import '../core/update_checker.dart';
 import '../services/singbox_service.dart';
 import '../services/android_vpn_service.dart';
@@ -112,10 +109,7 @@ typedef NodeFullChecker = Future<health.HealthCheckResult> Function(
 typedef ConnectionAttemptStarter = Future<void> Function(
   VpnNode node,
   AppSettings settings,
-  RemoteDnsProvider remoteDnsProvider,
 );
-typedef ConnectionAttemptStopper = Future<void> Function();
-typedef ConnectionVerifier = Future<DnsAttemptResult> Function();
 
 /// Main application state provider.
 class AppProvider extends ChangeNotifier {
@@ -125,9 +119,6 @@ class AppProvider extends ChangeNotifier {
     NodeTcpChecker? tcpChecker,
     NodeFullChecker? fullChecker,
     ConnectionAttemptStarter? connectionAttemptStarter,
-    ConnectionAttemptStopper? connectionAttemptStopper,
-    ConnectionVerifier? connectionVerifier,
-    DnsFallbackCoordinator? dnsFallbackCoordinator,
   })  : _windowsProxy = windowsProxy ?? WindowsProxyService(),
         _subscriptionLoader = subscriptionLoader ??
             ((url, onDiagnostic) =>
@@ -141,16 +132,12 @@ class AppProvider extends ChangeNotifier {
                   node: node,
                 )),
         _hasInjectedHealthCheckers = tcpChecker != null || fullChecker != null,
-        _connectionAttemptStarter = connectionAttemptStarter,
-        _connectionAttemptStopper = connectionAttemptStopper,
-        _connectionVerifier = connectionVerifier,
-        _dnsFallbackCoordinator = dnsFallbackCoordinator;
+        _connectionAttemptStarter = connectionAttemptStarter;
   static const _subscriptionUrlKey = 'subscription_url';
   static const _nodesKey = 'subscription_nodes';
   static const _selectedNodeKey = 'selected_node_id';
   static const _routeModeKey = 'route_mode';
   static const _systemProxyKey = 'system_proxy';
-  static const _remoteDnsProviderKey = 'remote_dns_provider';
 
   List<VpnNode> _nodes = [];
   String _selectedNodeId = '';
@@ -167,12 +154,7 @@ class AppProvider extends ChangeNotifier {
   final NodeFullChecker _fullChecker;
   final bool _hasInjectedHealthCheckers;
   final ConnectionAttemptStarter? _connectionAttemptStarter;
-  final ConnectionAttemptStopper? _connectionAttemptStopper;
-  final ConnectionVerifier? _connectionVerifier;
-  DnsFallbackCoordinator? _dnsFallbackCoordinator;
-  RemoteDnsProvider _preferredRemoteDns = RemoteDnsProvider.cloudflare;
   Completer<void>? _mobileConnectionCompleter;
-  bool _validatingConnection = false;
   Timer? _statsTimer;
   int _latencyBatchId = 0;
   Completer<void>? _nodeCheckCancellation;
@@ -228,10 +210,6 @@ class AppProvider extends ChangeNotifier {
   bool get isSwitching => _isSwitching;
   WindowsUpdateInfo? get availableUpdate => _availableUpdate;
   String get appVersion => _appVersion;
-  RemoteDnsProvider get preferredRemoteDns => _preferredRemoteDns;
-
-  DnsFallbackCoordinator get _dnsCoordinator =>
-      _dnsFallbackCoordinator ??= DnsFallbackCoordinator(onLog: log);
 
   VpnNode? get selectedNode {
     if (nodes.isEmpty) return null;
@@ -244,7 +222,6 @@ class AppProvider extends ChangeNotifier {
   /// Initialize the controller (platform-appropriate).
   Future<void> initialize(String corePath) async {
     await _loadAppVersion();
-    await restorePersistedState();
     if (_isiOS) {
       await _initIOS();
     } else if (_isAndroid) {
@@ -261,18 +238,6 @@ class AppProvider extends ChangeNotifier {
       }));
     }
     unawaited(checkForUpdates());
-  }
-
-  /// Restore connection preferences that are independent of platform setup.
-  Future<void> restorePersistedState() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _preferredRemoteDns = parseRemoteDnsProvider(
-            prefs.getString(_remoteDnsProviderKey),
-          ) ??
-          RemoteDnsProvider.cloudflare;
-      notifyListeners();
-    } catch (_) {}
   }
 
   Future<void> _loadAppVersion() async {
@@ -365,7 +330,7 @@ class AppProvider extends ChangeNotifier {
           if (androidConnectedPending != null &&
               !androidConnectedPending.isCompleted) {
             androidConnectedPending.complete();
-          } else if (!_validatingConnection) {
+          } else {
             _runtime = _runtime.copyWith(connected: true, proxyWarning: '');
           }
           notifyListeners();
@@ -424,7 +389,7 @@ class AppProvider extends ChangeNotifier {
           if (iosConnectedPending != null &&
               !iosConnectedPending.isCompleted) {
             iosConnectedPending.complete();
-          } else if (!_validatingConnection) {
+          } else {
             _runtime = _runtime.copyWith(connected: true, proxyWarning: '');
           }
           notifyListeners();
@@ -478,11 +443,9 @@ class AppProvider extends ChangeNotifier {
       runtimeDir: runtimeDir,
       onState: ({bool? connected, int? pid, int? code}) {
         final isConnected = connected == true;
-        if (!_validatingConnection || !isConnected) {
-          _runtime = _runtime.copyWith(connected: isConnected);
-        }
+        _runtime = _runtime.copyWith(connected: isConnected);
         if (isConnected) {
-          if (!_validatingConnection) _startStats();
+          _startStats();
         } else {
           unawaited(_restoreWindowsProxy());
           _statsTimer?.cancel();
@@ -549,7 +512,6 @@ class AppProvider extends ChangeNotifier {
 
   /// Select a node.
   void selectNode(String nodeId) {
-    _dnsFallbackCoordinator?.cancel();
     _selectedNodeId = nodeId;
     final node = selectedNode;
     _runtime = _runtime.copyWith(latency: node?.latencyMs);
@@ -872,56 +834,16 @@ class AppProvider extends ChangeNotifier {
         : _settings;
 
     _settings = mergedSettings;
-    _dnsCoordinator.cancel();
-    _validatingConnection = true;
     _runtime = _runtime.copyWith(connected: false, proxyWarning: '');
     _isSwitching = true;
     notifyListeners();
 
     try {
-      if (mergedSettings.routeMode == 'direct') {
-        await _startConnectionAttempt(
-          node,
-          mergedSettings,
-          _preferredRemoteDns,
-        );
-        _validatingConnection = false;
-        _runtime = _runtime.copyWith(connected: true, proxyWarning: '');
-        if (_connectionAttemptStarter == null) _startStats();
-        notifyListeners();
-        return;
-      }
-      final selected = await _dnsCoordinator.connect(
-        preferred: _preferredRemoteDns,
-        start: (remoteDnsProvider) => _startConnectionAttempt(
-          node,
-          mergedSettings,
-          remoteDnsProvider,
-        ),
-        stop: _stopConnectionAttempt,
-        verify: _verifyConnectionAttempt,
-      );
-      _preferredRemoteDns = selected;
-      await _persistPreferredRemoteDns();
-      _validatingConnection = false;
+      await _startConnectionAttempt(node, mergedSettings);
       _runtime = _runtime.copyWith(connected: true, proxyWarning: '');
       if (_connectionAttemptStarter == null) _startStats();
       notifyListeners();
-    } on AllDnsProvidersFailed catch (error) {
-      _validatingConnection = false;
-      _runtime = _runtime.copyWith(
-        connected: false,
-        proxyWarning: error.message,
-      );
-      notifyListeners();
-      rethrow;
-    } on DnsFallbackCancelled {
-      _validatingConnection = false;
-      _runtime = _runtime.copyWith(connected: false);
-      notifyListeners();
-      rethrow;
     } catch (_) {
-      _validatingConnection = false;
       _runtime = _runtime.copyWith(connected: false);
       notifyListeners();
       rethrow;
@@ -934,26 +856,24 @@ class AppProvider extends ChangeNotifier {
   Future<void> _startConnectionAttempt(
     VpnNode node,
     AppSettings settings,
-    RemoteDnsProvider remoteDnsProvider,
   ) async {
     final injected = _connectionAttemptStarter;
     if (injected != null) {
-      await injected(node, settings, remoteDnsProvider);
+      await injected(node, settings);
       return;
     }
     if (_isiOS) {
-      await _connectIOS(node, settings, remoteDnsProvider);
+      await _connectIOS(node, settings);
     } else if (_isAndroid) {
-      await _connectAndroid(node, settings, remoteDnsProvider);
+      await _connectAndroid(node, settings);
     } else {
-      await _connectDesktop(node, settings, remoteDnsProvider);
+      await _connectDesktop(node, settings);
     }
   }
 
   Future<void> _connectAndroid(
     VpnNode node,
     AppSettings settings,
-    RemoteDnsProvider remoteDnsProvider,
   ) async {
     if (_androidVpn == null) {
       await _initAndroid();
@@ -964,7 +884,6 @@ class AppProvider extends ChangeNotifier {
       node: node,
       mode: settings.routeMode,
       tunEnabled: true, // Android always uses TUN
-      remoteDnsProvider: remoteDnsProvider,
     );
     final configJson = singBoxConfigToJson(config);
 
@@ -1003,7 +922,6 @@ class AppProvider extends ChangeNotifier {
   Future<void> _connectIOS(
     VpnNode node,
     AppSettings settings,
-    RemoteDnsProvider remoteDnsProvider,
   ) async {
     if (_iosVpn == null) {
       await _initIOS();
@@ -1015,7 +933,6 @@ class AppProvider extends ChangeNotifier {
       mode: settings.routeMode,
       tunEnabled: true, // iOS always uses TUN
       logLevel: 'debug',
-      remoteDnsProvider: remoteDnsProvider,
     );
     final configJson = singBoxConfigToJson(config);
 
@@ -1049,7 +966,6 @@ class AppProvider extends ChangeNotifier {
   Future<void> _connectDesktop(
     VpnNode node,
     AppSettings settings,
-    RemoteDnsProvider remoteDnsProvider,
   ) async {
     if (_controller == null)
       throw Exception('sing-box controller not initialized.');
@@ -1063,7 +979,6 @@ class AppProvider extends ChangeNotifier {
       node: node,
       mode: settings.routeMode,
       tunEnabled: settings.tunEnabled,
-      remoteDnsProvider: remoteDnsProvider,
     );
     if (settings.systemProxy) {
       await _enableWindowsProxy();
@@ -1072,22 +987,10 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<DnsAttemptResult> _verifyConnectionAttempt() async {
-    final injected = _connectionVerifier;
-    if (injected != null) return injected();
-    if (_isiOS || _isAndroid) return verifyThroughSystemTun();
-    return verifyThroughDesktopProxy();
-  }
-
   Future<void> _stopConnectionAttempt() async {
-    final injected = _connectionAttemptStopper;
-    if (injected != null) {
-      await injected();
-      return;
-    }
     final pending = _mobileConnectionCompleter;
     if (pending != null && !pending.isCompleted) {
-      pending.completeError(const DnsFallbackCancelled());
+      pending.completeError(Exception('VPN connection cancelled'));
     }
     _mobileConnectionCompleter = null;
     if (_isiOS) {
@@ -1099,16 +1002,6 @@ class AppProvider extends ChangeNotifier {
       await _stopExistingSingBoxProcesses();
       await _restoreWindowsProxy();
     }
-  }
-
-  Future<void> _persistPreferredRemoteDns() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _remoteDnsProviderKey,
-        remoteDnsEndpoint(_preferredRemoteDns).id,
-      );
-    } catch (_) {}
   }
 
   Future<void> _enableWindowsProxy() async {
@@ -1147,8 +1040,6 @@ class AppProvider extends ChangeNotifier {
 
   /// Disconnect from current node.
   Future<void> disconnect() async {
-    _dnsCoordinator.cancel();
-    _validatingConnection = false;
     _statsTimer?.cancel();
     // Invalidate any in-flight node checks so late results cannot repopulate
     // the dashboard after the VPN has been stopped.
@@ -1208,7 +1099,6 @@ class AppProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _dnsFallbackCoordinator?.cancel();
     _statsTimer?.cancel();
     _controller?.dispose();
     if (Platform.isWindows) {

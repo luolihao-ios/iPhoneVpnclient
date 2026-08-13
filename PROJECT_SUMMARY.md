@@ -1,5 +1,13 @@
 # Forge VPN 项目总结
 
+### 26. 回退三组远程 DNS 并修复 Windows cache.db（2026-08-13）
+
+- 已移除 Cloudflare、Google、Quad9 三组代理 DoH 自动轮换，以及正式连接后的 HTTP 204 强制验证；Windows、Android、iOS 均恢复为一次平台连接，平台报告成功后不再被额外验证主动断开。
+- 共享 sing-box 配置恢复为本地 UDP DNS `223.5.5.5`，节点服务器域名和中国域名规则继续使用本地解析；智能分流的中国域名、中国 IP 直连规则保持不变。
+- Windows 正式连接明确关闭 `experimental.cache_file`，避免 sing-box 因默认 `cache.db` 出现 `Access is denied` 后退出，再被错误识别为三组 DNS 全部不可用。
+- 节点列表的 HTTP 204 可用性检查、单节点 3 秒限制、全节点遍历和手动停止功能保持不变。
+- 删除远程 DNS 首选项持久化、三组切换协调器及统一失败提示；本轮可识别构建号为 `0.1.3.005`。
+
 ### 25. 三组远程 DNS 自动切换（2026-08-12）
 - 内置 Cloudflare、Google、Quad9 三组 HTTPS DoH，固定使用 443 端口、IP 地址和 TLS 名称，并通过当前代理链路访问。
 - VPN 连接后使用 `http://www.gstatic.com/generate_204` 做真实链路验证，仅 HTTP 204 视为成功；当前解析器失败时自动停止旧连接并切换下一组。

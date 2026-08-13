@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'models/node.dart';
-import 'remote_dns.dart';
 
 const int defaultHttpPort = 2080;
 const int defaultSocksPort = 2081;
@@ -161,7 +160,6 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
 List<Map<String, dynamic>> _dnsRulesForNode(
   VpnNode? node,
   String mode,
-  RemoteDnsProvider remoteDnsProvider,
 ) {
   final rules = <Map<String, dynamic>>[];
   if (node != null && node.server.isNotEmpty && !_isIpAddress(node.server)) {
@@ -171,10 +169,6 @@ List<Map<String, dynamic>> _dnsRulesForNode(
     });
   }
   if (mode == 'rule') {
-    rules.add({
-      'domain_suffix': _foreignDomainOverrides,
-      'server': 'remote-${remoteDnsEndpoint(remoteDnsProvider).id}',
-    });
     rules.add({
       'rule_set': ['geosite-cn'],
       'server': 'local',
@@ -195,9 +189,7 @@ Map<String, dynamic> buildSingBoxConfig({
   bool includeApi = true,
   bool cacheFile = true,
   String logLevel = 'info',
-  RemoteDnsProvider remoteDnsProvider = RemoteDnsProvider.cloudflare,
 }) {
-  final selectedRemoteDns = remoteDnsEndpoint(remoteDnsProvider);
   final outbounds = [
     _nodeToOutbound(node),
     {'type': 'direct', 'tag': 'direct'},
@@ -279,13 +271,9 @@ Map<String, dynamic> buildSingBoxConfig({
           'server': '223.5.5.5',
           'server_port': 53,
         },
-        for (final provider in RemoteDnsProvider.values)
-          remoteDnsEndpoint(provider).toSingBoxServer(),
       ],
-      'rules': _dnsRulesForNode(node, mode, remoteDnsProvider),
-      'final': mode == 'direct'
-          ? 'local'
-          : 'remote-${selectedRemoteDns.id}',
+      'rules': _dnsRulesForNode(node, mode),
+      'final': 'local',
       'strategy': 'prefer_ipv4',
     },
     'inbounds': inbounds,

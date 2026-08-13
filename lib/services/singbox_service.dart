@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import '../core/models/node.dart';
-import '../core/remote_dns.dart';
 import '../core/singbox_config.dart';
 
 /// Callback for sing-box process state changes.
@@ -90,7 +89,6 @@ class SingBoxController {
     required VpnNode node,
     String mode = 'global',
     bool tunEnabled = false,
-    RemoteDnsProvider remoteDnsProvider = RemoteDnsProvider.cloudflare,
   }) async {
     _runId++;
     final currentRunId = _runId;
@@ -105,7 +103,7 @@ class SingBoxController {
       node: node,
       mode: mode,
       tunEnabled: tunEnabled,
-      remoteDnsProvider: remoteDnsProvider,
+      cacheFile: false,
     );
 
     final runDir = Directory('${runtimeDir}/runtime');

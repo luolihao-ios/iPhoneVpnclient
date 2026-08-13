@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forge_vpn_flutter/core/models/node.dart';
-import 'package:forge_vpn_flutter/core/remote_dns.dart';
 import 'package:forge_vpn_flutter/services/singbox_service.dart';
 
 void main() {
@@ -59,7 +58,7 @@ void main() {
     expect(stateChanges, isNot(contains(true)));
   });
 
-  test('Windows 控制器把选中的 DoH 写入 sing-box 配置', () async {
+  test('Windows 正式连接禁用 cache.db 并使用本地 DNS', () async {
     if (!Platform.isWindows) return;
     final directory = await Directory.systemTemp.createTemp('forge-vpn-dns-');
     addTearDown(() => directory.delete(recursive: true));
@@ -81,12 +80,14 @@ void main() {
         server: '127.0.0.1',
         port: 443,
       ),
-      remoteDnsProvider: RemoteDnsProvider.google,
     );
 
     final config = jsonDecode(
       await File(controller.configPath!).readAsString(),
     ) as Map<String, dynamic>;
-    expect((config['dns'] as Map)['final'], 'remote-google');
+    expect((config['dns'] as Map)['final'], 'local');
+    final experimental =
+        (config['experimental'] as Map).cast<String, dynamic>();
+    expect(experimental, isNot(contains('cache_file')));
   });
 }

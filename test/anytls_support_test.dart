@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forge_vpn_flutter/core/models/node.dart';
-import 'package:forge_vpn_flutter/core/remote_dns.dart';
 import 'package:forge_vpn_flutter/core/singbox_config.dart';
 import 'package:forge_vpn_flutter/core/subscription.dart';
 
@@ -254,7 +253,7 @@ proxies:
     );
   });
 
-  test('uses the selected proxy DoH as the global default resolver', () {
+  test('formal connections only use the local DNS resolver', () {
     final config = buildSingBoxConfig(
       node: const VpnNode(
         id: 'hkg-1',
@@ -264,29 +263,19 @@ proxies:
         port: 443,
         password: 'secret',
       ),
-      remoteDnsProvider: RemoteDnsProvider.google,
     );
     final dns = (config['dns'] as Map).cast<String, dynamic>();
-    expect(dns['final'], 'remote-google');
-    expect(
-      (dns['servers'] as List).cast<Map>(),
-      contains(
-        predicate<Map>((server) {
-          final tls = (server['tls'] as Map?)?.cast<String, dynamic>();
-          return server['tag'] == 'remote-google' &&
-              server['type'] == 'https' &&
-              server['server'] == '8.8.8.8' &&
-              server['server_port'] == 443 &&
-              server['path'] == '/dns-query' &&
-              server['detour'] == 'proxy' &&
-              tls?['enabled'] == true &&
-              tls?['server_name'] == 'dns.google';
-        }),
-      ),
-    );
+    final servers = (dns['servers'] as List).cast<Map>();
+
+    expect(dns['final'], 'local');
+    expect(servers.map((server) => server['tag']), ['local']);
+    expect(servers.single['type'], 'udp');
+    expect(servers.single['server'], '223.5.5.5');
+    expect(servers.single['server_port'], 53);
+    expect(servers.where((server) => server['type'] == 'https'), isEmpty);
   });
 
-  test('direct mode keeps local DNS and proxy DoH addresses are not forced direct', () {
+  test('direct mode keeps local DNS and remote DNS addresses are not forced direct', () {
     final config = buildSingBoxConfig(
       node: const VpnNode(
         id: 'hkg-1',
@@ -297,7 +286,6 @@ proxies:
         password: 'secret',
       ),
       mode: 'direct',
-      remoteDnsProvider: RemoteDnsProvider.cloudflare,
     );
 
     expect((config['dns'] as Map)['final'], 'local');
@@ -378,7 +366,7 @@ proxies:
     );
 
     final dns = (config['dns'] as Map).cast<String, dynamic>();
-    expect(dns['final'], 'remote-cloudflare');
+    expect(dns['final'], 'local');
     expect(
       (dns['rules'] as List).cast<Map>(),
       contains(
@@ -388,18 +376,6 @@ proxies:
                   .cast<String>()
                   .contains('geosite-cn') &&
               rule['server'] == 'local';
-        }),
-      ),
-    );
-    expect(
-      (dns['rules'] as List).cast<Map>(),
-      contains(
-        predicate<Map>((rule) {
-          final domains =
-              (rule['domain_suffix'] as List?)?.cast<String>() ?? const [];
-          return rule['server'] == 'remote-cloudflare' &&
-              domains.contains('google.com') &&
-              domains.contains('youtube.com');
         }),
       ),
     );
