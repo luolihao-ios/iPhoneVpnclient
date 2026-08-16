@@ -105,4 +105,41 @@ proxies:
     expect((outbound['tls'] as Map)['server_name'], 'cdn.example.com');
     expect((outbound['tls'] as Map)['alpn'], ['h3']);
   });
+
+  test('保留 Clash Hysteria2 端口范围和跳跃间隔', () {
+    final node = parseSubscription('''
+proxies:
+  - name: Hysteria2 range
+    type: hysteria2
+    server: hy2.example.com
+    port: 443
+    ports: 22000-27000
+    hop-interval: 30
+    password: client-password
+''').single;
+
+    expect(node.serverPorts, ['22000:27000']);
+    expect(node.hopInterval, '30s');
+  });
+
+  test('Hysteria2 端口范围只生成 server_ports', () {
+    const node = VpnNode(
+      id: 'hy2-range',
+      type: NodeType.hysteria2,
+      name: 'Hysteria2 range',
+      server: 'hy2.example.com',
+      port: 443,
+      password: 'client-password',
+      serverPorts: ['22000:27000'],
+      hopInterval: '30s',
+    );
+
+    final outbound = (buildSingBoxConfig(node: node, includeSocks: false)
+        ['outbounds'] as List)
+      .first as Map<String, dynamic>;
+
+    expect(outbound['server_ports'], ['22000:27000']);
+    expect(outbound.containsKey('server_port'), isFalse);
+    expect(outbound['hop_interval'], '30s');
+  });
 }

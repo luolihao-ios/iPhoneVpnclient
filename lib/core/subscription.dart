@@ -37,6 +37,39 @@ String _cryptoId(String value) {
   return 'node-${(hash & 0xFFFFFFFF).toRadixString(16)}';
 }
 
+List<String>? _serverPortRanges(Map<String, dynamic> node) {
+  final raw = node['server_ports'] ??
+      node['server-ports'] ??
+      node['ports'];
+  if (raw == null) return null;
+  final values = raw is List ? raw : raw.toString().split(',');
+  final ranges = <String>[];
+  for (final value in values) {
+    final text = value.toString().trim();
+    final match = RegExp(r'^(\d+)\s*[-:]\s*(\d+)$').firstMatch(text);
+    if (match != null) {
+      ranges.add('${match.group(1)}:${match.group(2)}');
+    }
+  }
+  return ranges.isEmpty ? null : ranges;
+}
+
+int _nodePort(Map<String, dynamic> node, {List<String>? serverPorts}) {
+  final raw = node['server_port'] ?? node['server-port'] ?? node['port'];
+  final port = int.tryParse(raw?.toString() ?? '');
+  if (port != null && port > 0) return port;
+  final firstRange = serverPorts?.first;
+  return int.tryParse(firstRange?.split(':').first ?? '') ?? 0;
+}
+
+String? _hopInterval(Map<String, dynamic> node) {
+  final raw = node['hop_interval'] ?? node['hop-interval'];
+  if (raw == null) return null;
+  final value = raw.toString().trim();
+  if (value.isEmpty) return null;
+  return RegExp(r'^\d+$').hasMatch(value) ? '${value}s' : value;
+}
+
 VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
   final type =
       (node['type'] ?? node['protocol'] ?? '').toString().toLowerCase();
@@ -132,10 +165,7 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
 
   if (type == 'anytls' || type == 'any-tls') {
     final server = (node['server'] ?? node['address'] ?? '').toString();
-    final port = int.tryParse(
-          node['server_port']?.toString() ?? node['port']?.toString() ?? '0',
-        ) ??
-        0;
+    final port = _nodePort(node);
     final tls = node['tls'] is Map
         ? Map<String, dynamic>.from(node['tls'] as Map)
         : const <String, dynamic>{};
@@ -178,33 +208,40 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
     );
   }
 
-  if (type == 'hysteria2' || type == 'hy2') {
+  if (type == 'hysteria2' || type == 'hy2' || type == 'hysteria') {
     final server = (node['server'] ?? node['address'] ?? '').toString();
-    final port = int.tryParse(
-          node['server_port']?.toString() ?? node['port']?.toString() ?? '0',
-        ) ??
-        0;
+    final serverPorts = _serverPortRanges(node);
+    final port = _nodePort(node, serverPorts: serverPorts);
     final tls = node['tls'] is Map
         ? Map<String, dynamic>.from(node['tls'] as Map)
         : const <String, dynamic>{};
     final obfs = node['obfs'];
-    final obfsPassword = obfs is Map
-        ? obfs['password']?.toString()
-        : node['obfs-password']?.toString() ??
-            node['obfs_password']?.toString() ??
-            node['obfsPassword']?.toString() ??
-            (obfs?.toString().toLowerCase() == 'salamander'
-                ? null
-                : obfs?.toString());
+    final obfsPassword = type == 'hysteria'
+        ? (obfs is Map
+            ? obfs['password']?.toString()
+            : obfs?.toString() ??
+                node['obfs-password']?.toString() ??
+                node['obfs_password']?.toString())
+        : (obfs is Map
+            ? obfs['password']?.toString()
+            : node['obfs-password']?.toString() ??
+                node['obfs_password']?.toString() ??
+                node['obfsPassword']?.toString() ??
+                (obfs?.toString().toLowerCase() == 'salamander'
+                    ? null
+                    : obfs?.toString()));
     final alpn = node['alpn'] ?? tls['alpn'];
     return VpnNode(
       id: node['nodeId']?.toString() ??
-          _cryptoId('hysteria2:$name:$server:$port'),
-      type: NodeType.hysteria2,
+          _cryptoId('$type:$name:$server:$port'),
+      type: type == 'hysteria' ? NodeType.hysteria : NodeType.hysteria2,
       name: name,
       server: server,
       port: port,
-      password: node['password']?.toString(),
+      password: type == 'hysteria'
+          ? (node['auth_str'] ?? node['auth-str'] ?? node['password'])
+              ?.toString()
+          : node['password']?.toString(),
       tls: node['tls'] != false,
       serverName: node['serverName']?.toString() ??
           node['sni']?.toString() ??
@@ -226,6 +263,8 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
       downMbps: int.tryParse(
         (node['down_mbps'] ?? node['down'])?.toString() ?? '',
       ),
+      serverPorts: serverPorts,
+      hopInterval: _hopInterval(node),
     );
   }
 
@@ -276,6 +315,9 @@ Map<String, dynamic> _singBoxOutboundToNode(Map<String, dynamic> outbound) {
     ...outbound,
     'name': outbound['tag'] ?? outbound['name'],
     'port': outbound['server_port'] ?? outbound['port'],
+    'server_ports': outbound['server_ports'],
+    'hop_interval': outbound['hop_interval'],
+    'auth_str': outbound['auth_str'],
     'alterId': outbound['alter_id'] ?? outbound['alterId'],
     'tls': _singBoxTlsEnabled(outbound['tls']),
     'serverName': outbound['server_name'] ??
@@ -394,7 +436,15 @@ dynamic _yamlToDart(dynamic value) {
   return value;
 }
 
-List<VpnNode> _parseClashYaml(String text) {
+String _formatTypeCounts(Map<String, int> counts) {
+  final keys = counts.keys.toList()..sort();
+  return '{${keys.map((key) => '$key:${counts[key]}').join(', ')}}';
+}
+
+List<VpnNode> _parseClashYaml(
+  String text, {
+  void Function(String message)? onDiagnostic,
+}) {
   final document = loadYaml(text);
   final normalized = _yamlToDart(document);
   if (normalized is! Map) {
@@ -406,12 +456,33 @@ List<VpnNode> _parseClashYaml(String text) {
     throw const SubscriptionError('No nodes found in Clash subscription');
   }
 
-  return proxies
-      .whereType<Map>()
-      .map((proxy) => _normalizeJsonNode(Map<String, dynamic>.from(proxy)))
-      .where((node) => node != null)
-      .cast<VpnNode>()
-      .toList();
+  final sourceCounts = <String, int>{};
+  final acceptedCounts = <String, int>{};
+  final skippedCounts = <String, int>{};
+  final nodes = <VpnNode>[];
+  for (final proxy in proxies.whereType<Map>()) {
+    final normalizedProxy = Map<String, dynamic>.from(proxy);
+    final sourceType =
+        (normalizedProxy['type'] ?? normalizedProxy['protocol'] ?? 'unknown')
+            .toString()
+            .toLowerCase();
+    sourceCounts[sourceType] = (sourceCounts[sourceType] ?? 0) + 1;
+    final node = _normalizeJsonNode(normalizedProxy, nodes.length);
+    if (node == null) {
+      skippedCounts[sourceType] = (skippedCounts[sourceType] ?? 0) + 1;
+      continue;
+    }
+    acceptedCounts[node.type.name] = (acceptedCounts[node.type.name] ?? 0) + 1;
+    nodes.add(node);
+  }
+  final fingerprint = _cryptoId(text).replaceFirst('node-', '');
+  onDiagnostic?.call(
+    'subscription parse summary: bytes=${utf8.encode(text).length} '
+    'fingerprint=$fingerprint source=${_formatTypeCounts(sourceCounts)} '
+    'accepted=${_formatTypeCounts(acceptedCounts)} '
+    'skipped=${_formatTypeCounts(skippedCounts)}',
+  );
+  return nodes;
 }
 
 VpnNode? _parseSsUri(String uri) {
@@ -641,7 +712,10 @@ List<VpnNode> parseSubscription(
   for (final candidate in candidates) {
     if (RegExp(r'^\s*proxies\s*:', multiLine: true).hasMatch(candidate)) {
       try {
-        final yamlNodes = _parseClashYaml(candidate);
+        final yamlNodes = _parseClashYaml(
+          candidate,
+          onDiagnostic: onDiagnostic,
+        );
         if (yamlNodes.isNotEmpty) {
           return _dedupeNodes(_filterSubscriptionMetadata(yamlNodes));
         }

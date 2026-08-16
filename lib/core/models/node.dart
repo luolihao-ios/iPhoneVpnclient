@@ -5,6 +5,7 @@ enum NodeType {
   vless,
   trojan,
   anytls,
+  hysteria,
   hysteria2,
   wireguard;
 
@@ -20,6 +21,8 @@ enum NodeType {
         return 'Trojan';
       case NodeType.anytls:
         return 'AnyTLS';
+      case NodeType.hysteria:
+        return 'Hysteria';
       case NodeType.hysteria2:
         return 'Hysteria2';
       case NodeType.wireguard:
@@ -81,11 +84,13 @@ class VpnNode {
   final String? idleSessionTimeout;
   final int minIdleSession;
 
-  // Hysteria2
+  // Hysteria
   final String? obfs;
   final List<String>? alpn;
   final int? upMbps;
   final int? downMbps;
+  final List<String>? serverPorts;
+  final String? hopInterval;
 
   // WireGuard
   final String? privateKey;
@@ -127,6 +132,8 @@ class VpnNode {
     this.alpn,
     this.upMbps,
     this.downMbps,
+    this.serverPorts,
+    this.hopInterval,
     this.privateKey,
     this.peerPublicKey,
     this.preSharedKey,
@@ -165,6 +172,8 @@ class VpnNode {
     List<String>? alpn,
     int? upMbps,
     int? downMbps,
+    List<String>? serverPorts,
+    String? hopInterval,
     String? privateKey,
     String? peerPublicKey,
     String? preSharedKey,
@@ -205,6 +214,8 @@ class VpnNode {
       alpn: alpn ?? this.alpn,
       upMbps: upMbps ?? this.upMbps,
       downMbps: downMbps ?? this.downMbps,
+      serverPorts: serverPorts ?? this.serverPorts,
+      hopInterval: hopInterval ?? this.hopInterval,
       privateKey: privateKey ?? this.privateKey,
       peerPublicKey: peerPublicKey ?? this.peerPublicKey,
       preSharedKey: preSharedKey ?? this.preSharedKey,
@@ -250,6 +261,9 @@ class VpnNode {
         if (alpn != null && alpn!.isNotEmpty) 'alpn': alpn,
         if (upMbps != null && upMbps! > 0) 'up_mbps': upMbps,
         if (downMbps != null && downMbps! > 0) 'down_mbps': downMbps,
+        if (serverPorts != null && serverPorts!.isNotEmpty)
+          'server_ports': serverPorts,
+        if (hopInterval != null) 'hop_interval': hopInterval,
         if (privateKey != null) 'privateKey': privateKey,
         if (peerPublicKey != null) 'peerPublicKey': peerPublicKey,
         if (localAddress != null) 'localAddress': localAddress,
@@ -286,6 +300,10 @@ class VpnNode {
       alpn: (json['alpn'] as List?)?.map((value) => value.toString()).toList(),
       upMbps: (json['up_mbps'] as num?)?.toInt(),
       downMbps: (json['down_mbps'] as num?)?.toInt(),
+      serverPorts: (json['server_ports'] as List?)
+          ?.map((value) => value.toString())
+          .toList(),
+      hopInterval: json['hop_interval'] as String?,
       privateKey: json['privateKey'] as String?,
       peerPublicKey: json['peerPublicKey'] as String?,
       localAddress: json['localAddress'] as String?,
@@ -311,6 +329,7 @@ class VpnNode {
       case NodeType.trojan:
         return password != null && password!.isNotEmpty;
       case NodeType.anytls:
+      case NodeType.hysteria:
       case NodeType.hysteria2:
         return password != null && password!.isNotEmpty;
       case NodeType.wireguard:

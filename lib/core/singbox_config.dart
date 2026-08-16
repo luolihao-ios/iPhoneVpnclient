@@ -83,6 +83,16 @@ Map<String, dynamic>? _tls(VpnNode node) {
   };
 }
 
+Map<String, dynamic> _hysteriaServer(VpnNode node) => {
+      'server': node.server,
+      if (node.serverPorts != null && node.serverPorts!.isNotEmpty)
+        'server_ports': node.serverPorts
+      else
+        'server_port': node.port,
+      if (node.hopInterval != null && node.hopInterval!.isNotEmpty)
+        'hop_interval': node.hopInterval,
+    };
+
 Map<String, dynamic> _nodeToOutbound(VpnNode node, {String tag = 'proxy'}) {
   switch (node.type) {
     case NodeType.shadowsocks:
@@ -157,8 +167,7 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node, {String tag = 'proxy'}) {
       return {
         'type': 'hysteria2',
         'tag': tag,
-        'server': node.server,
-        'server_port': node.port,
+        ..._hysteriaServer(node),
         'password': node.password,
         if (node.upMbps != null && node.upMbps! > 0) 'up_mbps': node.upMbps,
         if (node.downMbps != null && node.downMbps! > 0)
@@ -168,6 +177,24 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node, {String tag = 'proxy'}) {
             'type': 'salamander',
             'password': node.obfs,
           },
+        'tls': {
+          'enabled': true,
+          'server_name': node.serverName ?? node.server,
+          'insecure': node.insecure,
+          if (node.alpn != null && node.alpn!.isNotEmpty) 'alpn': node.alpn,
+        },
+      };
+
+    case NodeType.hysteria:
+      return {
+        'type': 'hysteria',
+        'tag': tag,
+        ..._hysteriaServer(node),
+        'auth_str': node.password,
+        if (node.upMbps != null && node.upMbps! > 0) 'up_mbps': node.upMbps,
+        if (node.downMbps != null && node.downMbps! > 0)
+          'down_mbps': node.downMbps,
+        if (node.obfs != null && node.obfs!.isNotEmpty) 'obfs': node.obfs,
         'tls': {
           'enabled': true,
           'server_name': node.serverName ?? node.server,
