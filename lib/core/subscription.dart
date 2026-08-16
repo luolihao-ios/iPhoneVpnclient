@@ -162,6 +162,51 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
     );
   }
 
+  if (type == 'hysteria2' || type == 'hy2') {
+    final server = (node['server'] ?? node['address'] ?? '').toString();
+    final port = int.tryParse(
+          node['server_port']?.toString() ?? node['port']?.toString() ?? '0',
+        ) ??
+        0;
+    final tls = node['tls'] is Map
+        ? Map<String, dynamic>.from(node['tls'] as Map)
+        : const <String, dynamic>{};
+    final obfs = node['obfs'];
+    final obfsPassword = obfs is Map
+        ? obfs['password']?.toString()
+        : obfs?.toString();
+    final alpn = node['alpn'] ?? tls['alpn'];
+    return VpnNode(
+      id: node['nodeId']?.toString() ?? _cryptoId('hysteria2:$name:$server:$port'),
+      type: NodeType.hysteria2,
+      name: name,
+      server: server,
+      port: port,
+      password: node['password']?.toString(),
+      tls: node['tls'] != false,
+      serverName: node['serverName']?.toString() ??
+          node['sni']?.toString() ??
+          tls['server_name']?.toString() ??
+          server,
+      insecure: node['insecure'] == true ||
+          node['insecure'] == 'true' ||
+          node['skip-cert-verify'] == true ||
+          tls['insecure'] == true,
+      alpn: alpn is List
+          ? alpn.map((value) => value.toString()).toList()
+          : alpn == null || alpn.toString().trim().isEmpty
+              ? null
+              : [alpn.toString()],
+      obfs: obfsPassword?.trim().isEmpty ?? true ? null : obfsPassword,
+      upMbps: int.tryParse(
+        (node['up_mbps'] ?? node['up'])?.toString() ?? '',
+      ),
+      downMbps: int.tryParse(
+        (node['down_mbps'] ?? node['down'])?.toString() ?? '',
+      ),
+    );
+  }
+
   if (type == 'wireguard') {
     final server = (node['server'] ?? node['address'] ?? '').toString();
     final port = int.tryParse(node['port']?.toString() ?? '51820') ?? 51820;
@@ -216,6 +261,10 @@ Map<String, dynamic> _singBoxOutboundToNode(Map<String, dynamic> outbound) {
         tls['servername'] ??
         outbound['sni'],
     'insecure': outbound['insecure'] ?? tls['insecure'] ?? false,
+    'alpn': outbound['alpn'] ?? tls['alpn'],
+    'obfs': outbound['obfs'] is Map
+        ? (outbound['obfs'] as Map)['password']
+        : outbound['obfs'],
     'transport': transport['type'] ?? outbound['network'],
     'path': transport['path'] ?? transport['service_name'] ?? outbound['path'],
     'host': headers['Host'] ?? headers['host'] ?? outbound['host'],

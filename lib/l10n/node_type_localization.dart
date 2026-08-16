@@ -6,6 +6,8 @@ extension NodeTypeLocalization on NodeType {
     switch (this) {
       case NodeType.anytls:
         return l10n.anyTls;
+      case NodeType.hysteria2:
+        return 'Hysteria2';
       case NodeType.vmess:
         return l10n.vmess;
       case NodeType.vless:

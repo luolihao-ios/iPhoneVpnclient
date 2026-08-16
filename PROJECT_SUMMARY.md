@@ -1,5 +1,11 @@
 # Forge VPN 项目总结
 
+### 27. Hysteria2 Clash / sing-box 订阅支持（2026-08-14，0.1.5）
+- Windows、Android 和 iOS 统一支持导入 Clash YAML 及 sing-box JSON 内的 `hysteria2` 节点；三端复用同一份 Dart 订阅解析与 sing-box 配置生成逻辑。
+- 解析并持久化服务器、端口、认证密码、SNI、ALPN、跳过证书校验、Salamander 混淆密码和上下行带宽参数；无法识别的单个节点仍会被跳过，不影响同一订阅中的其余有效节点。
+- 连接时生成原生 sing-box `hysteria2` outbound：TLS 始终启用，可选写入 `up_mbps`、`down_mbps` 及 `obfs: { type: salamander }`，供 Windows 核心与 Android/iOS libbox 直接使用。
+- 新增 Hysteria2 Clash、sing-box JSON、节点持久化和配置输出测试；正式发布版本为 `0.1.5+1`，设置页构建标记为 `0.1.5.001`。
+
 ### 26. 回退三组远程 DNS 并修复 Windows cache.db（2026-08-13，0.1.4）
 
 - 已移除 Cloudflare、Google、Quad9 三组代理 DoH 自动轮换，以及正式连接后的 HTTP 204 强制验证；Windows、Android、iOS 均恢复为一次平台连接，平台报告成功后不再被额外验证主动断开。
@@ -277,7 +283,7 @@ forge-vpn-flutter/
 ## 6. 当前状态快照
 
 ```
-GitHub: luolihao-aicode/iPhoneVpnclient
+GitHub: luolihao-ios/iPhoneVpnclient
 ```
 
 ### ✅ 已解决（2026-07-17 第 2 轮）
