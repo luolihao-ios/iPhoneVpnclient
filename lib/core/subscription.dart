@@ -681,7 +681,9 @@ Future<http.Response> _requestSubscriptionOnce(
   // Some subscription endpoints only allow known proxy clients. FlClash
   // sends this identity and commonly receives Clash YAML in response.
   var effectiveResponse = response;
-  if (effectiveResponse.statusCode == 403) {
+  if (effectiveResponse.statusCode == 403 ||
+      (effectiveResponse.statusCode == 200 &&
+          effectiveResponse.bodyBytes.isEmpty)) {
     effectiveResponse = await client.get(uri, headers: {
       'User-Agent': 'flclash',
       'Accept': 'application/yaml, text/yaml, text/plain, */*',
@@ -692,7 +694,9 @@ Future<http.Response> _requestSubscriptionOnce(
       'status=${effectiveResponse.statusCode} userAgent=flclash',
     );
   }
-  if (effectiveResponse.statusCode == 403) {
+  if (effectiveResponse.statusCode == 403 ||
+      (effectiveResponse.statusCode == 200 &&
+          effectiveResponse.bodyBytes.isEmpty)) {
     // Keep a browser fallback for endpoints that permit browsers instead.
     effectiveResponse = await client.get(uri, headers: {
       'User-Agent':

@@ -10,9 +10,11 @@ class _SequenceClient extends http.BaseClient {
 
   final List<Object> outcomes;
   int requestCount = 0;
+  final requests = <http.BaseRequest>[];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    requests.add(request);
     final outcome = outcomes[requestCount++];
     if (outcome is Exception) throw outcome;
     return outcome as http.StreamedResponse;
@@ -63,5 +65,21 @@ void main() {
     );
 
     expect(client.requestCount, 1);
+  });
+
+  test('HTTP 200 空响应会以 flclash 标识重试订阅请求', () async {
+    final client = _SequenceClient([
+      _response('', 200),
+      _response(_validNode, 200),
+    ]);
+
+    final nodes = await fetchSubscription(
+      'https://example.com/sub.txt',
+      client: client,
+    );
+
+    expect(nodes, hasLength(1));
+    expect(client.requestCount, 2);
+    expect(client.requests[1].headers['user-agent'], 'flclash');
   });
 }
