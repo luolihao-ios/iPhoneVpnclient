@@ -82,4 +82,18 @@ void main() {
     expect(client.requestCount, 2);
     expect(client.requests[1].headers['user-agent'], 'flclash');
   });
+
+  test('所有客户端标识均返回空响应时导入失败而不是保存空订阅', () async {
+    final client = _SequenceClient([
+      _response('', 200),
+      _response('', 200),
+      _response('', 200),
+    ]);
+
+    await expectLater(
+      fetchSubscription('https://example.com/empty', client: client),
+      throwsA(isA<SubscriptionError>()),
+    );
+    expect(client.requestCount, 3);
+  });
 }

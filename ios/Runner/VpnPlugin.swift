@@ -74,6 +74,27 @@ class VpnPlugin: NSObject {
                 result(info)
             }
 
+        case "checkNodeHealth":
+            guard let args = call.arguments as? [String: Any],
+                  let outboundTag = args["outboundTag"] as? String else {
+                result(FlutterError.invalidArgs)
+                return
+            }
+            let timeoutMs = args["timeoutMs"] as? Int ?? 3000
+            Task {
+                result(await checkNodeHealth(outboundTag: outboundTag, timeoutMs: timeoutMs))
+            }
+
+        case "selectNode":
+            guard let args = call.arguments as? [String: Any],
+                  let outboundTag = args["outboundTag"] as? String else {
+                result(FlutterError.invalidArgs)
+                return
+            }
+            Task {
+                result(await selectNode(outboundTag: outboundTag))
+            }
+
         case "requestPermission":
             // On iOS, VPN permission is system-granted via provisioning profile
             result(true)
@@ -136,6 +157,45 @@ class VpnPlugin: NSObject {
             } catch {
                 continuation.resume(returning: "Packet Tunnel message failed: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private func checkNodeHealth(outboundTag: String, timeoutMs: Int) async -> [String: Any] {
+        do {
+            let managers = try await NETunnelProviderManager.loadAllFromPreferences()
+            guard let manager = matchingManager(in: managers),
+                  manager.connection.status == .connected else {
+                return ["ok": false, "target": "HTTP 204", "error": "VPN core is not running"]
+            }
+            let reply = await providerMessage(
+                "health:\(outboundTag):\(max(1, timeoutMs))",
+                manager: manager
+            )
+            guard let data = reply.data(using: .utf8),
+                  let map = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return ["ok": false, "target": "HTTP 204", "error": reply]
+            }
+            return map
+        } catch {
+            return ["ok": false, "target": "HTTP 204", "error": error.localizedDescription]
+        }
+    }
+
+    private func selectNode(outboundTag: String) async -> [String: Any] {
+        do {
+            let managers = try await NETunnelProviderManager.loadAllFromPreferences()
+            guard let manager = matchingManager(in: managers),
+                  manager.connection.status == .connected else {
+                return ["ok": false, "error": "VPN core is not running"]
+            }
+            let reply = await providerMessage("select:\(outboundTag)", manager: manager)
+            guard let data = reply.data(using: .utf8),
+                  let map = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return ["ok": false, "error": reply]
+            }
+            return map
+        } catch {
+            return ["ok": false, "error": error.localizedDescription]
         }
     }
 

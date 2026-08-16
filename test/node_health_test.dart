@@ -60,4 +60,42 @@ void main() {
     await serverTask;
     await server.close();
   });
+
+  test('HTTPS 204 检测先通过本地代理建立 CONNECT 隧道', () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final requestSeen = Completer<String>();
+    final serverTask = server.first.then((socket) async {
+      final requestBytes = <int>[];
+      final headerComplete = Completer<String>();
+      final subscription = socket.listen((data) {
+        requestBytes.addAll(data);
+        final request = utf8.decode(requestBytes, allowMalformed: true);
+        if (request.contains('\r\n\r\n') && !headerComplete.isCompleted) {
+          headerComplete.complete(request);
+        }
+      });
+      final request = await headerComplete.future;
+      requestSeen.complete(request);
+      socket.write('HTTP/1.1 200 Connection established\r\n\r\n');
+      await socket.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      socket.destroy();
+      await subscription.cancel();
+    });
+
+    await expectLater(
+      requestHttp204ThroughProxy(
+        proxyPort: server.port,
+        target: Uri.parse('https://www.gstatic.com/generate_204'),
+        timeoutMs: 1000,
+      ),
+      throwsA(isA<Object>()),
+    );
+    expect(
+      await requestSeen.future,
+      contains('CONNECT www.gstatic.com:443 HTTP/1.1\r\n'),
+    );
+    await serverTask;
+    await server.close();
+  });
 }

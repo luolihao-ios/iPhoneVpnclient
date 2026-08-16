@@ -162,36 +162,38 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildDesktopHeader() {
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Responsive.brandBlueDark, Responsive.brandBlue],
+    return Consumer<AppProvider>(
+      builder: (context, provider, child) => Container(
+        height: 64,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Responsive.brandBlueDark, Responsive.brandBlue],
+          ),
         ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Row(
-        children: [
-          const Icon(Icons.shield_outlined, color: Colors.white, size: 28),
-          const SizedBox(width: 10),
-          const Text(
-            'Forge VPN',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 21,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Row(
+          children: [
+            const Icon(Icons.shield_outlined, color: Colors.white, size: 28),
+            const SizedBox(width: 10),
+            const Text(
+              'Forge VPN',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
             ),
-          ),
-          const Spacer(),
-          Text(
-            'Windows',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.82),
-              fontSize: 13,
+            const Spacer(),
+            Text(
+              'Windows · ${provider.appVersion}',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.82),
+                fontSize: 13,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -256,7 +258,8 @@ class _MainShellState extends State<MainShell> {
                       children: [
                         _buildUpdateBanner(context),
                         Expanded(
-                          child: IndexedStack(index: _currentIndex, children: _pages),
+                          child: IndexedStack(
+                              index: _currentIndex, children: _pages),
                         ),
                       ],
                     ),

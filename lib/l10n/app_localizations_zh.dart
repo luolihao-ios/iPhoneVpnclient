@@ -106,6 +106,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importAction => '导入';
 
   @override
+  String get importingAction => '正在导入…';
+
+  @override
   String get noNodesPasteUrl => '暂无节点，请在上方粘贴订阅地址并导入。';
 
   @override

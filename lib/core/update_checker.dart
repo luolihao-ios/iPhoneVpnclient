@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-const currentWindowsVersion = '0.1.2';
+const currentWindowsVersion = '0.1.5';
 const windowsReleaseApi =
     'https://api.github.com/repos/luolihao-ios/iPhoneVpnclient/releases?per_page=30';
 

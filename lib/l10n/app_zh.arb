@@ -33,6 +33,7 @@
   "selected": "已选择",
   "subscriptionUrl": "订阅地址",
   "importAction": "导入",
+  "importingAction": "正在导入…",
   "noNodesPasteUrl": "暂无节点，请在上方粘贴订阅地址并导入。",
   "importedSuccessfully": "导入成功",
   "importFailed": "导入失败：{error}",

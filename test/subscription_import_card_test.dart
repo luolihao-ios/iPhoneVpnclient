@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forge_vpn_flutter/l10n/app_localizations.dart';
@@ -42,6 +44,24 @@ void main() {
 
     expect(find.text('https://example.com/new'), findsOneWidget);
   });
+
+  testWidgets('订阅下载期间显示导入中并阻止重复提交', (tester) async {
+    final completion = Completer<void>();
+    final provider = _DelayedSubscriptionProvider(completion.future);
+    await _pumpCard(tester, provider);
+
+    await tester.enterText(find.byType(TextField), 'https://example.com/new');
+    await tester.tap(find.text('导入'));
+    await tester.pump();
+
+    expect(find.text('正在导入…'), findsOneWidget);
+    await tester.tap(find.text('正在导入…'));
+    await tester.pump();
+    expect(provider.importCount, 1);
+
+    completion.complete();
+    await tester.pumpAndSettle();
+  });
 }
 
 Future<void> _pumpCard(WidgetTester tester, AppProvider provider) {
@@ -49,6 +69,7 @@ Future<void> _pumpCard(WidgetTester tester, AppProvider provider) {
     ChangeNotifierProvider<AppProvider>.value(
       value: provider,
       child: MaterialApp(
+        locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: const Scaffold(body: SubscriptionImportCard()),
@@ -71,5 +92,19 @@ class _SubscriptionProvider extends AppProvider {
     lastImportedUrl = url;
     _subscriptionUrl = url;
     notifyListeners();
+  }
+}
+
+class _DelayedSubscriptionProvider extends _SubscriptionProvider {
+  _DelayedSubscriptionProvider(this._completion) : super('');
+
+  final Future<void> _completion;
+  int importCount = 0;
+
+  @override
+  Future<void> importSubscription(String url) async {
+    importCount++;
+    await _completion;
+    await super.importSubscription(url);
   }
 }

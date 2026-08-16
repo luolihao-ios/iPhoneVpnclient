@@ -106,6 +106,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importAction => 'Import';
 
   @override
+  String get importingAction => 'Importing…';
+
+  @override
   String get noNodesPasteUrl => 'No nodes. Paste URL & import above.';
 
   @override

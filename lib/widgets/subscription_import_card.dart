@@ -16,6 +16,7 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
   final _controller = TextEditingController();
   FocusNode _focusNode = FocusNode();
   bool _isExpanded = true;
+  bool _isImporting = false;
   String _lastSubscriptionUrl = '';
 
   @override
@@ -41,9 +42,11 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
   }
 
   Future<void> _import(AppProvider provider, AppLocalizations l10n) async {
+    if (_isImporting) return;
     _dismissKeyboard();
     final url = _controller.text.trim();
     if (url.isEmpty) return;
+    setState(() => _isImporting = true);
     try {
       await provider.importSubscription(url);
       if (!mounted) return;
@@ -58,6 +61,10 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
         content: Text(l10n.importFailed(e.toString())),
         backgroundColor: const Color(0xFFE15D52),
       ));
+    } finally {
+      if (mounted && _isImporting) {
+        setState(() => _isImporting = false);
+      }
     }
   }
 
@@ -145,7 +152,8 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => _import(provider, l10n),
+                    onPressed:
+                        _isImporting ? null : () => _import(provider, l10n),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF21B892),
                       foregroundColor: const Color(0xFF062019),
@@ -153,7 +161,8 @@ class _SubscriptionImportCardState extends State<SubscriptionImportCard> {
                           borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: Text(l10n.importAction,
+                    child: Text(
+                        _isImporting ? l10n.importingAction : l10n.importAction,
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),

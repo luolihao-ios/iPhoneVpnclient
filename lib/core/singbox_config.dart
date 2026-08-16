@@ -43,7 +43,16 @@ List<Map<String, dynamic>> _chinaRuleSets() => [
 
 bool _isIpAddress(String value) {
   if (value.isEmpty) return false;
-  return RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value) || value.contains(':');
+  return RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(value) ||
+      value.contains(':');
+}
+
+/// Stable outbound tag used when a mobile core keeps several candidates alive.
+/// The source node id is persisted, so this tag is also stable across a
+/// reconnect and can safely be passed to the native Clash API bridge.
+String nodeOutboundTag(VpnNode node) {
+  final safeId = node.id.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+  return 'node-$safeId';
 }
 
 Map<String, dynamic> _transport(VpnNode node) {
@@ -74,12 +83,12 @@ Map<String, dynamic>? _tls(VpnNode node) {
   };
 }
 
-Map<String, dynamic> _nodeToOutbound(VpnNode node) {
+Map<String, dynamic> _nodeToOutbound(VpnNode node, {String tag = 'proxy'}) {
   switch (node.type) {
     case NodeType.shadowsocks:
       return {
         'type': 'shadowsocks',
-        'tag': 'proxy',
+        'tag': tag,
         'server': node.server,
         'server_port': node.port,
         'method': node.method,
@@ -89,7 +98,7 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
     case NodeType.vmess:
       return {
         'type': 'vmess',
-        'tag': 'proxy',
+        'tag': tag,
         'server': node.server,
         'server_port': node.port,
         'uuid': node.uuid,
@@ -102,7 +111,7 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
     case NodeType.vless:
       return {
         'type': 'vless',
-        'tag': 'proxy',
+        'tag': tag,
         'server': node.server,
         'server_port': node.port,
         'uuid': node.uuid,
@@ -114,7 +123,7 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
     case NodeType.trojan:
       return {
         'type': 'trojan',
-        'tag': 'proxy',
+        'tag': tag,
         'server': node.server,
         'server_port': node.port,
         'password': node.password,
@@ -127,7 +136,7 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
     case NodeType.anytls:
       return {
         'type': 'anytls',
-        'tag': 'proxy',
+        'tag': tag,
         'server': node.server,
         'server_port': node.port,
         'password': node.password,
@@ -140,13 +149,14 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
           'enabled': true,
           'server_name': node.serverName ?? node.server,
           'insecure': node.insecure,
+          if (node.alpn != null && node.alpn!.isNotEmpty) 'alpn': node.alpn,
         },
       };
 
     case NodeType.hysteria2:
       return {
         'type': 'hysteria2',
-        'tag': 'proxy',
+        'tag': tag,
         'server': node.server,
         'server_port': node.port,
         'password': node.password,
@@ -169,7 +179,7 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
     case NodeType.wireguard:
       return {
         'type': 'wireguard',
-        'tag': 'proxy',
+        'tag': tag,
         'server': node.server,
         'server_port': node.port,
         'local_address': [node.localAddress],
@@ -179,6 +189,92 @@ Map<String, dynamic> _nodeToOutbound(VpnNode node) {
         if (node.reserved != null) 'reserved': node.reserved,
       };
   }
+}
+
+/// Builds a short-lived configuration for verifying one candidate node.
+///
+/// This deliberately excludes TUN, API, cache, and routing rules from the
+/// live VPN profile. The HTTP request made through its loopback inbound can
+/// therefore only leave through [node].
+Map<String, dynamic> buildSingBoxHealthCheckConfig({
+  required VpnNode node,
+  required int httpPort,
+}) {
+  return {
+    'log': {'level': 'warn', 'timestamp': true},
+    'inbounds': [
+      {
+        'type': 'http',
+        'tag': 'health-http-in',
+        'listen': '127.0.0.1',
+        'listen_port': httpPort,
+      },
+    ],
+    'outbounds': [
+      _nodeToOutbound(node, tag: 'health-proxy'),
+      {'type': 'direct', 'tag': 'direct'},
+      {'type': 'block', 'tag': 'block'},
+    ],
+    'route': {
+      'auto_detect_interface': true,
+      'final': 'health-proxy',
+    },
+  };
+}
+
+/// Builds the persistent batch-check configuration used by the desktop
+/// Clash-compatible delay API. All candidates live in one core process, so a
+/// delay request measures the selected outbound instead of process startup.
+Map<String, dynamic> buildSingBoxUrlTestConfig({
+  required List<VpnNode> nodes,
+  required int apiPort,
+}) {
+  if (nodes.isEmpty) {
+    throw ArgumentError.value(nodes, 'nodes', 'must not be empty');
+  }
+  final tags = nodes.map(nodeOutboundTag).toList(growable: false);
+  return {
+    'log': {'level': 'warn', 'timestamp': true},
+    'dns': {
+      'servers': [
+        {
+          'type': 'udp',
+          'tag': 'local',
+          'server': '223.5.5.5',
+          'server_port': 53,
+        },
+      ],
+      'final': 'local',
+      'strategy': 'prefer_ipv4',
+    },
+    'outbounds': [
+      ...nodes.map(
+        (node) => _nodeToOutbound(node, tag: nodeOutboundTag(node)),
+      ),
+      {
+        'type': 'selector',
+        'tag': 'proxy',
+        'outbounds': tags,
+        'default': tags.first,
+      },
+      {'type': 'direct', 'tag': 'direct'},
+      {'type': 'block', 'tag': 'block'},
+    ],
+    'route': {
+      'auto_detect_interface': true,
+      'default_domain_resolver': {
+        'server': 'local',
+        'strategy': 'prefer_ipv4',
+      },
+      'final': 'direct',
+    },
+    'experimental': {
+      'clash_api': {
+        'external_controller': '127.0.0.1:$apiPort',
+        'secret': '',
+      },
+    },
+  };
 }
 
 List<Map<String, dynamic>> _dnsRulesForNode(
@@ -204,6 +300,7 @@ List<Map<String, dynamic>> _dnsRulesForNode(
 /// Build a complete sing-box configuration JSON.
 Map<String, dynamic> buildSingBoxConfig({
   required VpnNode node,
+  List<VpnNode>? nodes,
   String mode = 'global',
   bool tunEnabled = false,
   int httpPort = defaultHttpPort,
@@ -214,8 +311,24 @@ Map<String, dynamic> buildSingBoxConfig({
   bool cacheFile = true,
   String logLevel = 'info',
 }) {
-  final outbounds = [
-    _nodeToOutbound(node),
+  final candidates = nodes == null || nodes.isEmpty ? <VpnNode>[node] : nodes;
+  final includeSelector = nodes != null;
+  final outbounds = <Map<String, dynamic>>[
+    if (includeSelector) ...[
+      ...candidates.map(
+        (candidate) => _nodeToOutbound(
+          candidate,
+          tag: nodeOutboundTag(candidate),
+        ),
+      ),
+      {
+        'type': 'selector',
+        'tag': 'proxy',
+        'outbounds': candidates.map(nodeOutboundTag).toList(growable: false),
+        'default': nodeOutboundTag(node),
+      },
+    ] else
+      _nodeToOutbound(node),
     {'type': 'direct', 'tag': 'direct'},
     {'type': 'block', 'tag': 'block'},
   ];

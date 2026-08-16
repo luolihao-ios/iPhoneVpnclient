@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import '../core/node_health.dart';
 
 /// Callbacks for iOS VPN service events.
 typedef VpnStatusCallback = void Function(String status, String message);
@@ -101,6 +102,45 @@ class IosVpnService {
       return Map<String, dynamic>.from(result ?? {});
     } catch (e) {
       return {'error': e.toString()};
+    }
+  }
+
+  /// Ask the active Packet Tunnel's sing-box core to URL-test one outbound.
+  Future<HealthCheckResult> checkNodeHealth(
+    String outboundTag, {
+    int timeoutMs = 3000,
+  }) async {
+    try {
+      final result = await _channel.invokeMethod<Map>('checkNodeHealth', {
+        'outboundTag': outboundTag,
+        'timeoutMs': timeoutMs,
+      });
+      final data = Map<String, dynamic>.from(result ?? const {});
+      return HealthCheckResult(
+        ok: data['ok'] == true,
+        latency: data['latency'] as int?,
+        healthStatus: data['ok'] == true ? 'available' : 'unavailable',
+        target: data['target'] as String? ?? 'HTTP 204',
+        error: data['error'] as String?,
+      );
+    } catch (error) {
+      return HealthCheckResult(
+        ok: false,
+        healthStatus: 'unavailable',
+        target: 'HTTP 204',
+        error: error.toString(),
+      );
+    }
+  }
+
+  Future<bool> selectNode(String outboundTag) async {
+    try {
+      final result = await _channel.invokeMethod<Map>('selectNode', {
+        'outboundTag': outboundTag,
+      });
+      return Map<String, dynamic>.from(result ?? const {})['ok'] == true;
+    } catch (_) {
+      return false;
     }
   }
 

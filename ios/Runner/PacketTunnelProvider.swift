@@ -80,6 +80,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
                 "lines": recentLogs(),
                 "routingDiagnostics": recentRoutingDiagnostics(),
             ])
+        case let request where request.hasPrefix("health:"):
+            let fields = request.split(separator: ":", maxSplits: 2).map(String.init)
+            guard fields.count == 3, let timeoutMs = Int(fields[2]) else {
+                return response(["ok": false, "target": "HTTP 204", "error": "invalid health request"])
+            }
+            return await healthResponse(outboundTag: fields[1], timeoutMs: timeoutMs)
+        case let request where request.hasPrefix("select:"):
+            let outboundTag = String(request.dropFirst("select:".count))
+            return await selectResponse(outboundTag: outboundTag)
         default:
             return response(["error": "unknown request"])
         }
@@ -326,6 +335,85 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, LibboxCommandServerHan
         }
         commandServer = nil
         platformInterface.reset()
+    }
+
+    /// The Clash API asks the running sing-box core to URL-test the named
+    /// outbound. It is intentionally run inside the Packet Tunnel process so
+    /// the app process never tests a candidate through the currently selected
+    /// VPN route.
+    private func healthResponse(outboundTag: String, timeoutMs: Int) async -> Data? {
+        guard commandServer != nil else {
+            return response([
+                "ok": false,
+                "target": "HTTP 204",
+                "error": "VPN core is not running",
+            ])
+        }
+        guard let encodedTag = outboundTag.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) else {
+            return response(["ok": false, "target": "HTTP 204", "error": "invalid outbound tag"])
+        }
+        var components = URLComponents(
+            string: "http://127.0.0.1:9090/proxies/\(encodedTag)/delay"
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "url", value: "http://www.gstatic.com/generate_204"),
+            URLQueryItem(name: "timeout", value: String(max(1, timeoutMs))),
+        ]
+        guard let url = components.url else {
+            return response(["ok": false, "target": "HTTP 204", "error": "invalid health URL"])
+        }
+
+        let startedAt = Date()
+        var request = URLRequest(url: url)
+        request.timeoutInterval = TimeInterval(max(1, timeoutMs)) / 1000.0
+        do {
+            let (data, rawResponse) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = rawResponse as? HTTPURLResponse,
+                  httpResponse.statusCode == 200,
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let delay = json["delay"] as? NSNumber,
+                  delay.intValue >= 0 else {
+                return response(["ok": false, "target": "HTTP 204", "error": "core URLTest failed"])
+            }
+            let latency = max(1, delay.intValue)
+            appendLog("[health] outbound=\(outboundTag) HTTP 204 latency=\(latency)ms")
+            return response(["ok": true, "target": "HTTP 204", "latency": latency])
+        } catch {
+            let elapsed = Int(Date().timeIntervalSince(startedAt) * 1000)
+            appendLog("[health] outbound=\(outboundTag) failed after \(elapsed)ms: \(error.localizedDescription)")
+            return response([
+                "ok": false,
+                "target": "HTTP 204",
+                "error": error.localizedDescription,
+            ])
+        }
+    }
+
+    private func selectResponse(outboundTag: String) async -> Data? {
+        guard commandServer != nil else {
+            return response(["ok": false, "error": "VPN core is not running"])
+        }
+        guard !outboundTag.isEmpty,
+              let url = URL(string: "http://127.0.0.1:9090/proxies/proxy") else {
+            return response(["ok": false, "error": "invalid outbound tag"])
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["name": outboundTag])
+        do {
+            let (_, rawResponse) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = rawResponse as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 || httpResponse.statusCode == 204 else {
+                return response(["ok": false, "error": "selector API failed"])
+            }
+            appendLog("[selector] selected outbound=\(outboundTag)")
+            return response(["ok": true])
+        } catch {
+            return response(["ok": false, "error": error.localizedDescription])
+        }
     }
 
     private func setupLibbox() throws {

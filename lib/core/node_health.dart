@@ -73,8 +73,8 @@ Future<HealthCheckResult> checkNodeAvailability({
   required String runtimeDir,
   required VpnNode node,
   int timeoutMs = 3000,
-  String targetUrl = 'http://www.gstatic.com/generate_204',
-  String targetLabel = 'HTTP 204',
+  String targetUrl = 'https://www.gstatic.com/generate_204',
+  String targetLabel = 'HTTPS 204',
 }) async {
   Process? child;
   String? configPath;
@@ -90,15 +90,9 @@ Future<HealthCheckResult> checkNodeAvailability({
     configPath =
         '${runtimeDir}/health-${pid}-${DateTime.now().millisecondsSinceEpoch}-${Random().nextDouble().toStringAsFixed(10)}.json';
 
-    final config = buildSingBoxConfig(
+    final config = buildSingBoxHealthCheckConfig(
       node: node,
-      mode: 'global',
-      tunEnabled: false,
       httpPort: httpPort,
-      includeSocks: false,
-      includeApi: false,
-      cacheFile: false,
-      logLevel: 'warn',
     );
     await File(configPath).writeAsString(singBoxConfigToJson(config));
 
@@ -167,15 +161,43 @@ Future<String> requestHttp204ThroughProxy({
     );
     final remaining = timeoutMs - stopwatch.elapsedMilliseconds;
     if (remaining <= 0) throw TimeoutException('node check timed out');
+    final targetPort = target.hasPort
+        ? target.port
+        : target.scheme.toLowerCase() == 'https'
+            ? 443
+            : 80;
+    if (target.scheme.toLowerCase() == 'https') {
+      socket.write(
+        'CONNECT ${target.host}:$targetPort HTTP/1.1\r\n'
+        'Host: ${target.host}:$targetPort\r\n'
+        'Connection: keep-alive\r\n\r\n',
+      );
+      await socket.flush();
+      final remaining = timeoutMs - stopwatch.elapsedMilliseconds;
+      if (remaining <= 0) throw TimeoutException('node check timed out');
+      final connectStatus = await utf8.decoder
+          .bind(socket)
+          .transform(const LineSplitter())
+          .first
+          .timeout(Duration(milliseconds: remaining));
+      if (!RegExp(r'^HTTP/1\.[01] 200\b', caseSensitive: false)
+          .hasMatch(connectStatus.trimLeft())) {
+        throw Exception('proxy CONNECT failed: $connectStatus');
+      }
+      socket = await SecureSocket.secure(socket, host: target.host);
+    }
+    final requestTarget = target.scheme.toLowerCase() == 'https'
+        ? (target.path.isEmpty ? '/' : target.path) +
+            (target.hasQuery ? '?${target.query}' : '')
+        : target.toString();
     socket.write(
-      'GET $target HTTP/1.1\r\n'
+      'GET $requestTarget HTTP/1.1\r\n'
       'Host: ${target.host}\r\n'
       'Connection: close\r\n'
       'User-Agent: ForgeVPN-HealthCheck\r\n\r\n',
     );
     await socket.flush();
-    return await utf8
-        .decoder
+    return await utf8.decoder
         .bind(socket)
         .transform(const LineSplitter())
         .first

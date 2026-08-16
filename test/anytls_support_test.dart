@@ -187,6 +187,33 @@ proxies:
     expect(nodes.single.insecure, isTrue);
   });
 
+  test('preserves Clash AnyTLS TLS and session fields in sing-box output', () {
+    final node = parseSubscription('''
+proxies:
+  - name: AnyTLS Clash advanced
+    type: anytls
+    server: example.com
+    port: 443
+    password: secret
+    sni: cdn.example.com
+    alpn: [h2, http/1.1]
+    idle-session-check-interval: 30s
+    idle-session-timeout: 45s
+    min-idle-session: 2
+''').single;
+
+    final outbound = (buildSingBoxConfig(
+      node: node,
+      includeSocks: false,
+    )['outbounds'] as List)
+        .first as Map;
+
+    expect(node.idleSessionCheckInterval, '30s');
+    expect(node.idleSessionTimeout, '45s');
+    expect(node.minIdleSession, 2);
+    expect((outbound['tls'] as Map)['alpn'], ['h2', 'http/1.1']);
+  });
+
   test('filters traffic and expiry metadata from subscription nodes', () {
     final nodes = parseSubscription(jsonEncode({
       'proxies': [
@@ -275,7 +302,9 @@ proxies:
     expect(servers.where((server) => server['type'] == 'https'), isEmpty);
   });
 
-  test('direct mode keeps local DNS and remote DNS addresses are not forced direct', () {
+  test(
+      'direct mode keeps local DNS and remote DNS addresses are not forced direct',
+      () {
     final config = buildSingBoxConfig(
       node: const VpnNode(
         id: 'hkg-1',
@@ -292,7 +321,8 @@ proxies:
     final rules = ((config['route'] as Map)['rules'] as List).cast<Map>();
     final forcedDirectCidrs = rules
         .where((rule) => rule['outbound'] == 'direct')
-        .expand((rule) => (rule['ip_cidr'] as List?)?.cast<String>() ?? const [])
+        .expand(
+            (rule) => (rule['ip_cidr'] as List?)?.cast<String>() ?? const [])
         .toSet();
     expect(forcedDirectCidrs, isNot(contains('1.1.1.1/32')));
     expect(forcedDirectCidrs, isNot(contains('8.8.8.8/32')));

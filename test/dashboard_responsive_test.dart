@@ -8,6 +8,7 @@ import 'package:forge_vpn_flutter/core/models/node.dart';
 import 'package:forge_vpn_flutter/core/node_health.dart' as health;
 import 'package:forge_vpn_flutter/providers/app_provider.dart';
 import 'package:forge_vpn_flutter/screens/dashboard_screen.dart';
+import 'package:forge_vpn_flutter/main.dart';
 import 'package:forge_vpn_flutter/widgets/responsive.dart';
 import 'package:forge_vpn_flutter/l10n/app_localizations.dart';
 
@@ -35,6 +36,28 @@ void main() {
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('route_mode'), 'rule');
+  });
+
+  testWidgets('Windows 顶栏始终显示完整构建号', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final provider = AppProvider(initialAppVersion: '0.1.5.003');
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(1200, 800)),
+        child: ChangeNotifierProvider.value(
+          value: provider,
+          child: const MaterialApp(
+            locale: Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: MainShell(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Windows · 0.1.5.003'), findsOneWidget);
   });
 
   testWidgets('phone dashboard does not overflow the server header',

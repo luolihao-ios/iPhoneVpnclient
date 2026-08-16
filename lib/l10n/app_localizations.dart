@@ -284,6 +284,12 @@ abstract class AppLocalizations {
   /// **'Import'**
   String get importAction;
 
+  /// No description provided for @importingAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing…'**
+  String get importingAction;
+
   /// No description provided for @noNodesPasteUrl.
   ///
   /// In en, this message translates to:

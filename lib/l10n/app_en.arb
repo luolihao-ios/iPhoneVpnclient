@@ -33,6 +33,7 @@
   "selected": "Selected",
   "subscriptionUrl": "Subscription URL",
   "importAction": "Import",
+  "importingAction": "Importing…",
   "noNodesPasteUrl": "No nodes. Paste URL & import above.",
   "importedSuccessfully": "Imported successfully",
   "importFailed": "Import failed: {error}",

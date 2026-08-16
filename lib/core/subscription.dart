@@ -153,12 +153,28 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
           tls['server_name']?.toString() ??
           server,
       insecure: node['insecure'] == true ||
+          node['insecure'] == 'true' ||
           node['skip-cert-verify'] == true ||
+          node['skip-cert-verify'] == 'true' ||
           tls['insecure'] == true,
-      idleSessionCheckInterval: node['idle_session_check_interval']?.toString(),
-      idleSessionTimeout: node['idle_session_timeout']?.toString(),
-      minIdleSession:
-          int.tryParse(node['min_idle_session']?.toString() ?? '0') ?? 0,
+      alpn: (node['alpn'] ?? tls['alpn']) is List
+          ? ((node['alpn'] ?? tls['alpn']) as List)
+              .map((value) => value.toString())
+              .toList()
+          : (node['alpn'] ?? tls['alpn']) == null
+              ? null
+              : [(node['alpn'] ?? tls['alpn']).toString()],
+      idleSessionCheckInterval: (node['idle_session_check_interval'] ??
+              node['idle-session-check-interval'])
+          ?.toString(),
+      idleSessionTimeout:
+          (node['idle_session_timeout'] ?? node['idle-session-timeout'])
+              ?.toString(),
+      minIdleSession: int.tryParse(
+              (node['min_idle_session'] ?? node['min-idle-session'])
+                      ?.toString() ??
+                  '0') ??
+          0,
     );
   }
 
@@ -174,10 +190,16 @@ VpnNode? _normalizeJsonNode(Map<String, dynamic> node, [int index = 0]) {
     final obfs = node['obfs'];
     final obfsPassword = obfs is Map
         ? obfs['password']?.toString()
-        : obfs?.toString();
+        : node['obfs-password']?.toString() ??
+            node['obfs_password']?.toString() ??
+            node['obfsPassword']?.toString() ??
+            (obfs?.toString().toLowerCase() == 'salamander'
+                ? null
+                : obfs?.toString());
     final alpn = node['alpn'] ?? tls['alpn'];
     return VpnNode(
-      id: node['nodeId']?.toString() ?? _cryptoId('hysteria2:$name:$server:$port'),
+      id: node['nodeId']?.toString() ??
+          _cryptoId('hysteria2:$name:$server:$port'),
       type: NodeType.hysteria2,
       name: name,
       server: server,
@@ -779,6 +801,11 @@ Future<List<VpnNode>> fetchSubscription(String url,
     try {
       final nodes = parseSubscription(body, onDiagnostic: onDiagnostic);
       onDiagnostic?.call('subscription parsed: nodes=${nodes.length}');
+      if (nodes.isEmpty) {
+        throw const SubscriptionError(
+          'Subscription returned no supported proxy nodes',
+        );
+      }
       return nodes;
     } catch (error) {
       onDiagnostic?.call('subscription parse failed: $error');

@@ -17,7 +17,8 @@ proxies:
     sni: cdn.example.com
     alpn: [h3, h2]
     skip-cert-verify: true
-    obfs: obfs-password
+    obfs: salamander
+    obfs-password: obfs-password
     up: 20
     down: 100
 ''');
@@ -98,7 +99,8 @@ proxies:
     expect(outbound['password'], 'client-password');
     expect(outbound['up_mbps'], 20);
     expect(outbound['down_mbps'], 100);
-    expect(outbound['obfs'], {'type': 'salamander', 'password': 'obfs-password'});
+    expect(
+        outbound['obfs'], {'type': 'salamander', 'password': 'obfs-password'});
     expect((outbound['tls'] as Map)['enabled'], isTrue);
     expect((outbound['tls'] as Map)['server_name'], 'cdn.example.com');
     expect((outbound['tls'] as Map)['alpn'], ['h3']);

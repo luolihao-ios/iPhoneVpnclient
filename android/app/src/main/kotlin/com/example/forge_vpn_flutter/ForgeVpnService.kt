@@ -47,6 +47,18 @@ class ForgeVpnService : VpnService() {
             "interfaces" to emptyList<Map<String, Any>>(),
         )
 
+        fun checkNodeHealth(outboundTag: String, timeoutMs: Int): Map<String, Any> =
+            activeService?.controller?.checkNodeHealth(outboundTag, timeoutMs)
+                ?: mapOf(
+                    "ok" to false,
+                    "target" to "HTTP 204",
+                    "error" to "VPN core is not running",
+                )
+
+        fun selectOutbound(outboundTag: String): Map<String, Any> =
+            activeService?.controller?.selectOutbound(outboundTag)
+                ?: mapOf("ok" to false, "error" to "VPN core is not running")
+
         fun assetPathForAbi(abi: String): String? {
             val binaryAbi = when (abi) {
                 "arm64-v8a" -> "arm64"

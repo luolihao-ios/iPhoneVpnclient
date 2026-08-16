@@ -31,6 +31,12 @@ object VpnBridge {
                 "isRunning" -> result.success(state.isRunning())
                 "getState" -> result.success(state.snapshot())
                 "diagnose" -> diagnose(context, result)
+                "checkNodeHealth" -> checkNodeHealth(
+                    call.argument<String>("outboundTag"),
+                    call.argument<Int>("timeoutMs") ?: 3000,
+                    result,
+                )
+                "selectNode" -> selectNode(call.argument<String>("outboundTag"), result)
                 else -> result.notImplemented()
             }
         }
@@ -89,6 +95,38 @@ object VpnBridge {
                 "sdkInt" to Build.VERSION.SDK_INT,
             )
         )
+    }
+
+    private fun checkNodeHealth(
+        outboundTag: String?,
+        timeoutMs: Int,
+        result: MethodChannel.Result,
+    ) {
+        if (outboundTag.isNullOrBlank()) {
+            result.error("INVALID_OUTBOUND", "Outbound tag is empty", null)
+            return
+        }
+        Thread {
+            result.success(ForgeVpnService.checkNodeHealth(outboundTag, timeoutMs))
+        }.apply {
+            name = "forge-node-health"
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun selectNode(outboundTag: String?, result: MethodChannel.Result) {
+        if (outboundTag.isNullOrBlank()) {
+            result.error("INVALID_OUTBOUND", "Outbound tag is empty", null)
+            return
+        }
+        Thread {
+            result.success(ForgeVpnService.selectOutbound(outboundTag))
+        }.apply {
+            name = "forge-node-selector"
+            isDaemon = true
+            start()
+        }
     }
 
     private fun requestPermission(result: MethodChannel.Result) {

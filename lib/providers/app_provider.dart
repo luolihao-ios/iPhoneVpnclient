@@ -13,6 +13,7 @@ import '../core/node_storage.dart';
 import '../core/subscription.dart';
 import '../core/stats.dart';
 import '../core/singbox_config.dart';
+import '../core/singbox_urltest.dart';
 import '../core/desktop_vpn_diagnostics.dart';
 import '../core/update_checker.dart';
 import '../services/singbox_service.dart';
@@ -106,6 +107,9 @@ typedef NodeFullChecker = Future<health.HealthCheckResult> Function(
   String corePath,
   String runtimeDir,
 );
+typedef MobileNodeHealthChecker = Future<health.HealthCheckResult> Function(
+  VpnNode node,
+);
 typedef ConnectionAttemptStarter = Future<void> Function(
   VpnNode node,
   AppSettings settings,
@@ -118,7 +122,10 @@ class AppProvider extends ChangeNotifier {
     SubscriptionLoader? subscriptionLoader,
     NodeTcpChecker? tcpChecker,
     NodeFullChecker? fullChecker,
+    MobileNodeHealthChecker? mobileHealthChecker,
+    DesktopNodeHealthSessionFactory? desktopHealthSessionFactory,
     ConnectionAttemptStarter? connectionAttemptStarter,
+    String initialAppVersion = '--',
   })  : _windowsProxy = windowsProxy ?? WindowsProxyService(),
         _subscriptionLoader = subscriptionLoader ??
             ((url, onDiagnostic) =>
@@ -131,8 +138,15 @@ class AppProvider extends ChangeNotifier {
                   runtimeDir: runtimeDir,
                   node: node,
                 )),
-        _hasInjectedHealthCheckers = tcpChecker != null || fullChecker != null,
-        _connectionAttemptStarter = connectionAttemptStarter;
+        _mobileHealthChecker = mobileHealthChecker,
+        _desktopHealthSessionFactory = desktopHealthSessionFactory,
+        _hasInjectedFullChecker = fullChecker != null,
+        _hasInjectedHealthCheckers = tcpChecker != null ||
+            fullChecker != null ||
+            mobileHealthChecker != null ||
+            desktopHealthSessionFactory != null,
+        _connectionAttemptStarter = connectionAttemptStarter,
+        _appVersion = initialAppVersion;
   static const _subscriptionUrlKey = 'subscription_url';
   static const _nodesKey = 'subscription_nodes';
   static const _selectedNodeKey = 'selected_node_id';
@@ -152,6 +166,9 @@ class AppProvider extends ChangeNotifier {
   final SubscriptionLoader _subscriptionLoader;
   final NodeTcpChecker _tcpChecker;
   final NodeFullChecker _fullChecker;
+  final MobileNodeHealthChecker? _mobileHealthChecker;
+  final DesktopNodeHealthSessionFactory? _desktopHealthSessionFactory;
+  final bool _hasInjectedFullChecker;
   final bool _hasInjectedHealthCheckers;
   final ConnectionAttemptStarter? _connectionAttemptStarter;
   Completer<void>? _mobileConnectionCompleter;
@@ -161,12 +178,51 @@ class AppProvider extends ChangeNotifier {
   int _subscriptionRevision = 0;
   bool _isSwitching = false;
   WindowsUpdateInfo? _availableUpdate;
-  String _appVersion = currentWindowsVersion;
+  String _appVersion;
 
   /// Platform detection.
   static bool get _isAndroid =>
       !kIsWeb && Platform.operatingSystem == 'android';
   static bool get _isiOS => !kIsWeb && Platform.operatingSystem == 'ios';
+  bool get _usesMobileCoreHealth =>
+      _isAndroid || _isiOS || _mobileHealthChecker != null;
+  bool get _usesDesktopUrlTest =>
+      !_usesMobileCoreHealth &&
+      !_hasInjectedFullChecker &&
+      (_desktopHealthSessionFactory != null || _controller != null);
+
+  Future<DesktopNodeHealthSession> _openDesktopHealthSession(
+    List<VpnNode> nodes,
+  ) {
+    final corePath = _controller?.corePath ?? '';
+    final runtimeDir = _controller?.runtimeDir ?? Directory.systemTemp.path;
+    final factory = _desktopHealthSessionFactory;
+    if (factory != null) return factory(nodes, corePath, runtimeDir);
+    return SingBoxUrlTestSession.start(
+      nodes: nodes,
+      corePath: corePath,
+      runtimeDir: runtimeDir,
+    );
+  }
+
+  Future<health.HealthCheckResult> _checkMobileNode(VpnNode node) async {
+    final injected = _mobileHealthChecker;
+    if (injected != null) return injected(node);
+    if (_isiOS) {
+      if (_iosVpn == null) await _initIOS();
+      return _iosVpn!.checkNodeHealth(nodeOutboundTag(node));
+    }
+    if (_isAndroid) {
+      if (_androidVpn == null) await _initAndroid();
+      return _androidVpn!.checkNodeHealth(nodeOutboundTag(node));
+    }
+    return const health.HealthCheckResult(
+      ok: false,
+      healthStatus: 'unavailable',
+      target: 'HTTP 204',
+      error: 'Native sing-box health checker is unavailable',
+    );
+  }
 
   /// Auto-detect sing-box binary path for desktop platforms.
   static String _detectCorePath() {
@@ -232,7 +288,7 @@ class AppProvider extends ChangeNotifier {
 
     // Restore saved subscription URL
     await _restoreSubscription();
-    if (_nodes.isNotEmpty) {
+    if (_nodes.isNotEmpty && (!_usesMobileCoreHealth || _runtime.connected)) {
       unawaited(startInitialNodeScreening().catchError((error) {
         log('Startup node screening failed: $error');
       }));
@@ -251,8 +307,9 @@ class AppProvider extends ChangeNotifier {
             : '$version.${build.toString().padLeft(3, '0')}';
       }
     } catch (_) {
-      // Keep the compile-time fallback for tests and unsupported platforms.
+      // Keep the visible placeholder for tests and unsupported platforms.
     }
+    notifyListeners();
   }
 
   Future<void> checkForUpdates() async {
@@ -350,8 +407,7 @@ class AppProvider extends ChangeNotifier {
         case 'error':
           log('VPN Error: $message');
           final androidErrorPending = _mobileConnectionCompleter;
-          if (androidErrorPending != null &&
-              !androidErrorPending.isCompleted) {
+          if (androidErrorPending != null && !androidErrorPending.isCompleted) {
             androidErrorPending.completeError(Exception(message));
           }
           _runtime = _runtime.copyWith(connected: false);
@@ -386,8 +442,7 @@ class AppProvider extends ChangeNotifier {
       switch (status) {
         case 'connected':
           final iosConnectedPending = _mobileConnectionCompleter;
-          if (iosConnectedPending != null &&
-              !iosConnectedPending.isCompleted) {
+          if (iosConnectedPending != null && !iosConnectedPending.isCompleted) {
             iosConnectedPending.complete();
           } else {
             _runtime = _runtime.copyWith(connected: true, proxyWarning: '');
@@ -491,7 +546,7 @@ class AppProvider extends ChangeNotifier {
     await _persistNodes();
     notifyListeners();
 
-    unawaited(startInitialNodeScreening());
+    _scheduleInitialNodeScreeningAfterImport();
   }
 
   /// Import nodes from raw subscription text.
@@ -507,6 +562,14 @@ class AppProvider extends ChangeNotifier {
     }
     await _persistNodes();
     notifyListeners();
+    _scheduleInitialNodeScreeningAfterImport();
+  }
+
+  void _scheduleInitialNodeScreeningAfterImport() {
+    if (_usesMobileCoreHealth && !_runtime.connected) {
+      log('Node health check will start after the mobile VPN core is connected');
+      return;
+    }
     unawaited(startInitialNodeScreening());
   }
 
@@ -515,8 +578,23 @@ class AppProvider extends ChangeNotifier {
     _selectedNodeId = nodeId;
     final node = selectedNode;
     _runtime = _runtime.copyWith(latency: node?.latencyMs);
+    if (_runtime.connected && node != null && _usesMobileCoreHealth) {
+      unawaited(_selectMobileOutbound(node));
+    }
     unawaited(_persistNodes());
     notifyListeners();
+  }
+
+  Future<void> _selectMobileOutbound(VpnNode node) async {
+    final tag = nodeOutboundTag(node);
+    final selected = _isiOS
+        ? await _iosVpn?.selectNode(tag)
+        : _isAndroid
+            ? await _androidVpn?.selectNode(tag)
+            : true;
+    if (selected != true) {
+      log('Failed to select node in mobile core: ${node.name}');
+    }
   }
 
   /// Ping a single node.
@@ -536,21 +614,38 @@ class AppProvider extends ChangeNotifier {
         .toList();
     notifyListeners();
 
-    if (_isAndroid || _isiOS) {
-      // Mobile builds use the native libbox runtime and do not ship a CLI
-      // executable for the desktop-style local proxy health check.
-      final result = await _tcpChecker(node);
+    if (_usesMobileCoreHealth) {
+      final result = await _checkMobileNode(node);
       _nodes = updateNodeLatency(_nodes, nodeId, result);
       _runtime = _runtime.copyWith(latency: selectedNode?.latencyMs);
       notifyListeners();
       return result;
     }
 
-    final result = await _fullChecker(
-      node,
-      _controller?.corePath ?? '',
-      '${_controller?.runtimeDir ?? '/'}/health',
-    );
+    late health.HealthCheckResult result;
+    if (_usesDesktopUrlTest) {
+      DesktopNodeHealthSession? session;
+      try {
+        session = await _openDesktopHealthSession([node]);
+        result = await session.check(node);
+      } catch (error) {
+        result = health.HealthCheckResult(
+          ok: false,
+          healthStatus: 'unavailable',
+          target: 'Clash URLTest',
+          error: error.toString(),
+        );
+        log('Node URLTest failed to start: $error');
+      } finally {
+        await session?.close();
+      }
+    } else {
+      result = await _fullChecker(
+        node,
+        _controller?.corePath ?? '',
+        '${_controller?.runtimeDir ?? '/'}/health',
+      );
+    }
 
     _nodes = updateNodeLatency(_nodes, nodeId, result);
     _runtime = _runtime.copyWith(latency: selectedNode?.latencyMs);
@@ -610,16 +705,24 @@ class AppProvider extends ChangeNotifier {
     final corePath = _controller?.corePath ?? '';
     final healthDir = '${_controller?.runtimeDir ?? '/'}/health';
 
+    DesktopNodeHealthSession? desktopSession;
     try {
+      if (_usesDesktopUrlTest) {
+        desktopSession = await _openDesktopHealthSession(nodesToCheck);
+      }
       final summary = await runInitialNodeScreening(
         nodes: nodesToCheck,
-        validationTarget: (_isAndroid || _isiOS) ? 'Node' : 'HTTP 204',
+        validationTarget: desktopSession == null ? 'HTTP 204' : 'Clash URLTest',
         tcpProbe: (node) async {
+          // A mobile Socket.connect would be routed through the currently
+          // selected VPN node and creates a false positive. Let every
+          // candidate reach the core URLTest stage instead.
+          if (_usesMobileCoreHealth || desktopSession != null) return 1;
           final result = await _awaitNodeCheck(
             _tcpChecker(node),
             cancellation: cancellation.future,
             timeout: const Duration(milliseconds: 1200),
-            onTimeout: const health.HealthCheckResult(
+            onTimeout: health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
               target: 'Node',
@@ -629,9 +732,11 @@ class AppProvider extends ChangeNotifier {
           return result.ok ? result.latency : null;
         },
         validate: (node) {
-          final check = (_isAndroid || _isiOS)
-              ? _tcpChecker(node)
-              : _fullChecker(node, corePath, healthDir);
+          final check = _usesMobileCoreHealth
+              ? _checkMobileNode(node)
+              : desktopSession != null
+                  ? desktopSession.check(node)
+                  : _fullChecker(node, corePath, healthDir);
           return _awaitNodeCheck(
             check,
             cancellation: cancellation.future,
@@ -639,7 +744,7 @@ class AppProvider extends ChangeNotifier {
             onTimeout: health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
-              target: (_isAndroid || _isiOS) ? 'Node' : 'HTTP 204',
+              target: desktopSession == null ? 'HTTP 204' : 'Clash URLTest',
               error: '节点检查超时',
             ),
           );
@@ -658,6 +763,14 @@ class AppProvider extends ChangeNotifier {
           updateNode(node.id, resetNodeHealth, notify: false);
         },
         onNodeResult: (node, result) {
+          if (!result.ok && result.target != 'Node') {
+            final error =
+                result.error?.replaceAll(RegExp(r'[\r\n]+'), ' ') ?? 'unknown';
+            log(
+              'node health failed: node=${node.name} target=${result.target} '
+              'error=$error',
+            );
+          }
           updateNode(
             node.id,
             (current) =>
@@ -677,6 +790,7 @@ class AppProvider extends ChangeNotifier {
     } catch (error) {
       if (isCurrentBatch()) log('Initial node screening failed: $error');
     } finally {
+      await desktopSession?.close();
       if (isCurrentBatch()) {
         _nodes = _nodes
             .map((node) => node.healthStatus == HealthStatus.checking
@@ -722,6 +836,29 @@ class AppProvider extends ChangeNotifier {
     final corePath = _controller?.corePath ?? '';
     final healthDir = '${_controller?.runtimeDir ?? '/'}/health';
 
+    void resetRemainingChecks(String reason) {
+      if (batchId != _latencyBatchId) return;
+      _latencyBatchId++;
+      _nodes = _nodes
+          .map((node) => node.healthStatus == HealthStatus.checking
+              ? resetNodeHealth(node)
+              : node)
+          .toList();
+      _runtime = _runtime.copyWith(checkingNodes: false);
+      log(reason);
+      notifyListeners();
+    }
+
+    DesktopNodeHealthSession? desktopSession;
+    try {
+      if (_usesDesktopUrlTest) {
+        desktopSession = await _openDesktopHealthSession(nodesToCheck);
+      }
+    } catch (error) {
+      resetRemainingChecks('Node URLTest core failed to start: $error');
+      return;
+    }
+
     final workers =
         List.generate(min(concurrency, nodesToCheck.length), (_) async {
       while (cursor < nodesToCheck.length && batchId == _latencyBatchId) {
@@ -731,15 +868,17 @@ class AppProvider extends ChangeNotifier {
         late health.HealthCheckResult result;
         try {
           result = await _awaitNodeCheck(
-            (_isAndroid || _isiOS)
-                ? _tcpChecker(node)
-                : _fullChecker(node, corePath, healthDir),
+            _usesMobileCoreHealth
+                ? _checkMobileNode(node)
+                : desktopSession != null
+                    ? desktopSession.check(node)
+                    : _fullChecker(node, corePath, healthDir),
             cancellation: cancellation.future,
             timeout: const Duration(seconds: 3),
             onTimeout: health.HealthCheckResult(
               ok: false,
               healthStatus: 'unavailable',
-              target: (_isAndroid || _isiOS) ? 'Node' : 'HTTP 204',
+              target: desktopSession == null ? 'HTTP 204' : 'Clash URLTest',
               error: '节点检查超时',
             ),
           );
@@ -759,30 +898,23 @@ class AppProvider extends ChangeNotifier {
       }
     });
 
-    void resetRemainingChecks(String reason) {
-      if (batchId != _latencyBatchId) return;
-      _latencyBatchId++;
-      _nodes = _nodes
-          .map((node) => node.healthStatus == HealthStatus.checking
-              ? resetNodeHealth(node)
-              : node)
-          .toList();
-      _runtime = _runtime.copyWith(checkingNodes: false);
-      log(reason);
-      notifyListeners();
-    }
-
+    final batchTimeout = Duration(
+      seconds: max(
+          30, ((nodesToCheck.length + concurrency - 1) ~/ concurrency) * 3 + 5),
+    );
     try {
-      await Future.wait(workers).timeout(const Duration(seconds: 30));
+      await Future.wait(workers).timeout(batchTimeout);
     } on TimeoutException {
       if (batchId == _latencyBatchId) {
         resetRemainingChecks(
-            'Node health check batch timed out after 30 seconds');
+            'Node health check batch timed out after ${batchTimeout.inSeconds} seconds');
       }
       return;
     } catch (error) {
       log('Node health check batch failed: $error');
       resetRemainingChecks('Node health check batch stopped unexpectedly');
+    } finally {
+      await desktopSession?.close();
     }
     if (batchId == _latencyBatchId) {
       _runtime = _runtime.copyWith(checkingNodes: false);
@@ -843,6 +975,9 @@ class AppProvider extends ChangeNotifier {
       _runtime = _runtime.copyWith(connected: true, proxyWarning: '');
       if (_connectionAttemptStarter == null) _startStats();
       notifyListeners();
+      if (_usesMobileCoreHealth) {
+        unawaited(startInitialNodeScreening());
+      }
     } catch (_) {
       _runtime = _runtime.copyWith(connected: false);
       notifyListeners();
@@ -882,6 +1017,7 @@ class AppProvider extends ChangeNotifier {
     // Build the sing-box config JSON
     final config = buildSingBoxConfig(
       node: node,
+      nodes: _nodes,
       mode: settings.routeMode,
       tunEnabled: true, // Android always uses TUN
     );
@@ -930,6 +1066,7 @@ class AppProvider extends ChangeNotifier {
     // Build the sing-box config JSON (same format as Android)
     final config = buildSingBoxConfig(
       node: node,
+      nodes: _nodes,
       mode: settings.routeMode,
       tunEnabled: true, // iOS always uses TUN
       logLevel: 'debug',
